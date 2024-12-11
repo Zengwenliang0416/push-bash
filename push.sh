@@ -17,6 +17,11 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# 定义打印彩色文本的函数
+print_color() {
+    printf "%b%s%b\n" "$1" "$2" "$NC"
+}
+
 # 记录操作状态的变量
 STATUS_FILES_ADDED=false
 STATUS_CHANGES_COMMITTED=false
@@ -26,33 +31,33 @@ STATUS_COMMIT_MESSAGE=""
 
 # 显示操作状态和恢复建议
 show_status_and_recovery() {
-    echo -e "\n${BLUE}=== 操作状态 ===${NC}"
-    echo -e "1. 文件暂存: $STATUS_FILES_ADDED"
-    echo -e "2. 更改提交: $STATUS_CHANGES_COMMITTED"
+    print_color "$BLUE" "=== 操作状态 ==="
+    print_color "" "1. 文件暂存: $STATUS_FILES_ADDED"
+    print_color "" "2. 更改提交: $STATUS_CHANGES_COMMITTED"
     if [ ! -z "$STATUS_COMMIT_HASH" ]; then
-        echo -e "3. 提交哈希: $STATUS_COMMIT_HASH"
+        print_color "" "3. 提交哈希: $STATUS_COMMIT_HASH"
     fi
-    echo -e "4. 目标分支: $STATUS_BRANCH"
-    echo -e "5. 提交信息: $STATUS_COMMIT_MESSAGE"
+    print_color "" "4. 目标分支: $STATUS_BRANCH"
+    print_color "" "5. 提交信息: $STATUS_COMMIT_MESSAGE"
 
-    echo -e "\n${BLUE}=== 恢复建议 ===${NC}"
+    print_color "$BLUE" "=== 恢复建议 ==="
     if [ "$STATUS_CHANGES_COMMITTED" = true ]; then
-        echo -e "您的更改已经提交到本地仓库。要重新推送，请执行："
-        echo -e "git push origin $STATUS_BRANCH"
-        echo -e "\n如果想要撤销提交，请执行："
-        echo -e "git reset --soft HEAD^"
+        print_color "" "您的更改已经提交到本地仓库。要重新推送，请执行："
+        print_color "" "git push origin $STATUS_BRANCH"
+        print_color "" "\n如果想要撤销提交，请执行："
+        print_color "" "git reset --soft HEAD^"
     elif [ "$STATUS_FILES_ADDED" = true ]; then
-        echo -e "文件已暂存但未提交。要继续，请执行："
-        echo -e "git commit -m \"$STATUS_COMMIT_MESSAGE\""
-        echo -e "git push origin $STATUS_BRANCH"
-        echo -e "\n如果想要撤销暂存，请执行："
-        echo -e "git reset"
+        print_color "" "文件已暂存但未提交。要继续，请执行："
+        print_color "" "git commit -m \"$STATUS_COMMIT_MESSAGE\""
+        print_color "" "git push origin $STATUS_BRANCH"
+        print_color "" "\n如果想要撤销暂存，请执行："
+        print_color "" "git reset"
     fi
 }
 
 # 错误处理函数
 handle_error() {
-    echo -e "\n${RED}执行过程中发生错误${NC}"
+    print_color "$RED" "执行过程中发生错误"
     show_status_and_recovery
     exit 1
 }
@@ -84,42 +89,42 @@ show_commit_history() {
 show_commit_details() {
     local commit_hash="$1"
     if [ -z "$commit_hash" ]; then
-        echo -e "${RED}错误: 未指定提交哈希${NC}"
+        print_color "$RED" "错误: 未指定提交哈希"
         return 1
     fi
 
-    echo -e "\n${BLUE}=== 提交详情 ===${NC}"
+    print_color "$BLUE" "=== 提交详情 ==="
     git show --color --pretty=fuller "$commit_hash"
 }
 
 revert_commit() {
     local commit_hash="$1"
     if [ -z "$commit_hash" ]; then
-        echo -e "${RED}错误: 未指定提交哈希${NC}"
+        print_color "$RED" "错误: 未指定提交哈希"
         return 1
     fi
 
-    echo -e "\n${YELLOW}即将撤销以下提交:${NC}"
+    print_color "$YELLOW" "即将撤销以下提交:"
     git show --oneline --no-patch "$commit_hash"
     read -e -p "确认撤销? (y/n): " confirm
     if [ "$(echo "$confirm" | tr '[:upper:]' '[:lower:]')" = "y" ]; then
         git revert "$commit_hash"
-        echo -e "${GREEN}已成功撤销提交${NC}"
+        print_color "$GREEN" "已成功撤销提交"
     else
-        echo "操作已取消"
+        print_color "" "操作已取消"
     fi
 }
 
 # 主菜单函数
 show_main_menu() {
     while true; do
-        echo -e "\n${BLUE}=== Git 操作菜单 ===${NC}"
-        echo "1. 提交更改"
-        echo "2. 查看提交历史"
-        echo "3. 搜索提交"
-        echo "4. 查看提交详情"
-        echo "5. 撤销提交"
-        echo "6. 退出"
+        print_color "$BLUE" "=== Git 操作菜单 ==="
+        print_color "" "1. 提交更改"
+        print_color "" "2. 查看提交历史"
+        print_color "" "3. 搜索提交"
+        print_color "" "4. 查看提交详情"
+        print_color "" "5. 撤销提交"
+        print_color "" "6. 退出"
         
         read -e -p "请选择操作 (1-6): " choice
         case $choice in
@@ -150,11 +155,11 @@ show_main_menu() {
                 fi
                 ;;
             6)
-                echo "退出程序"
+                print_color "" "退出程序"
                 exit 0
                 ;;
             *)
-                echo -e "${RED}无效的选择${NC}"
+                print_color "$RED" "无效的选择"
                 ;;
         esac
     done
@@ -164,23 +169,23 @@ show_main_menu() {
 commit_changes() {
     # 检查是否有未提交的更改
     if [ -z "$(git status --porcelain)" ]; then
-        echo -e "${YELLOW}没有发现需要提交的更改${NC}"
+        print_color "$YELLOW" "没有发现需要提交的更改"
         read -e -p "是否继续? (y/n): " continue
         if [ "$(echo "$continue" | tr '[:upper:]' '[:lower:]')" != "y" ]; then
-            echo "操作已取消"
+            print_color "" "操作已取消"
             exit 0
         fi
     fi
 
     # 显示当前Git状态
-    echo "当前Git状态:"
+    print_color "" "当前Git状态:"
     git status -s
 
     # 选择提交方式
-    echo -e "\n${YELLOW}请选择提交方式:${NC}"
-    echo "1. 提交所有更改 (git add .)"
-    echo "2. 交互式选择文件 (git add -p)"
-    echo "3. 手动输入文件路径"
+    print_color "$YELLOW" "请选择提交方式:"
+    print_color "" "1. 提交所有更改 (git add .)"
+    print_color "" "2. 交互式选择文件 (git add -p)"
+    print_color "" "3. 手动输入文件路径"
     read -e -p "请选择 (1-3): " choice
 
     case $choice in
@@ -193,27 +198,36 @@ commit_changes() {
             STATUS_FILES_ADDED=true
             ;;
         3)
-            read -e -p "请输入文件路径: " file_path
-            if [ -n "$file_path" ]; then
-                git add "$file_path"
+            print_color "$YELLOW" "请输入要添加的文件路径（多个文件用空格分隔）:"
+            read -r file_paths
+            if [ -n "$file_paths" ]; then
+                # 使用for循环处理每个文件路径
+                for file_path in $file_paths; do
+                    if git add "$file_path" 2>/dev/null; then
+                        print_color "$GREEN" "成功添加: $file_path"
+                    else
+                        print_color "$RED" "添加失败: $file_path"
+                        exit 1
+                    fi
+                done
                 STATUS_FILES_ADDED=true
             else
-                echo -e "${RED}错误: 文件路径不能为空${NC}"
+                print_color "$RED" "错误: 文件路径不能为空"
                 exit 1
             fi
             ;;
         *)
-            echo -e "${RED}错误: 无效的选择${NC}"
+            print_color "$RED" "错误: 无效的选择"
             exit 1
             ;;
     esac
 
     # 显示已暂存的更改
-    echo -e "\n${YELLOW}已暂存的更改:${NC}"
+    print_color "$YELLOW" "已暂存的更改:"
     git status -s
 
     # 选择提交信息类型
-    echo -e "\n${YELLOW}请选择提交类型:${NC}"
+    print_color "$YELLOW" "请选择提交类型:"
     declare -a commit_types=(
         "feat: ✨ 新功能"
         "fix: 🐛 修复bug"
@@ -239,14 +253,14 @@ commit_changes() {
     )
 
     for i in "${!commit_types[@]}"; do
-        echo "$((i+1)). ${commit_types[i]}"
+        print_color "" "$((i+1)). ${commit_types[i]}"
     done
     read -e -p "请选择 (1-${#commit_types[@]}): " type_choice
 
     if [ "$type_choice" -ge 1 ] && [ "$type_choice" -le ${#commit_types[@]} ]; then
         selected_type=${commit_types[$((type_choice-1))]}
     else
-        echo -e "${RED}错误: 无效的选择${NC}"
+        print_color "$RED" "错误: 无效的选择"
         exit 1
     fi
 
@@ -296,9 +310,9 @@ commit_changes() {
             "🔇 - 删除日志"
         )
 
-        echo -e "\n${YELLOW}请选择表情:${NC}"
+        print_color "$YELLOW" "请选择表情:"
         for i in "${!emojis[@]}"; do
-            echo "$((i+1)). ${emojis[i]}"
+            print_color "" "$((i+1)). ${emojis[i]}"
         done
         
         read -e -p "请选择 (1-${#emojis[@]}): " emoji_choice
@@ -310,7 +324,7 @@ commit_changes() {
             read -e -p "请输入提交类型: " custom_type
             commit_prefix="$custom_type: $selected_emoji"
         else
-            echo -e "${RED}错误: 无效的选择${NC}"
+            print_color "$RED" "错误: 无效的选择"
             exit 1
         fi
     else
@@ -320,7 +334,7 @@ commit_changes() {
     # 获取提交描述
     read -e -p "请输入提交描述: " commit_desc
     if [ -z "$commit_desc" ]; then
-        echo -e "${RED}提交描述不能为空${NC}"
+        print_color "$RED" "提交描述不能为空"
         exit 1
     fi
 
@@ -335,29 +349,29 @@ commit_changes() {
     fi
     STATUS_BRANCH="$branch"
 
-    echo -e "\n${YELLOW}即将执行以下操作:${NC}"
-    echo "1. git commit -m \"$message\""
-    echo "2. git push origin $branch"
+    print_color "$YELLOW" "即将执行以下操作:"
+    print_color "" "1. git commit -m \"$message\""
+    print_color "" "2. git push origin $branch"
 
     read -e -p "确认执行? (y/n): " confirm
     if [ "$(echo "$confirm" | tr '[:upper:]' '[:lower:]')" != "y" ]; then
-        echo "操作已取消"
+        print_color "" "操作已取消"
         exit 0
     fi
 
     # 执行git命令
-    echo -e "\n${YELLOW}正在执行git操作...${NC}"
+    print_color "$YELLOW" "正在执行git操作..."
 
-    echo -e "\n${YELLOW}1. 提交更改...${NC}"
+    print_color "$YELLOW" "1. 提交更改..."
     git commit -m "$message"
     STATUS_CHANGES_COMMITTED=true
     STATUS_COMMIT_HASH=$(git rev-parse HEAD)
 
-    echo -e "\n${YELLOW}2. 推送到远程...${NC}"
+    print_color "$YELLOW" "2. 推送到远程..."
     if git push origin "$branch"; then
-        echo -e "\n${GREEN}所有操作已成功完成！${NC}"
+        print_color "$GREEN" "所有操作已成功完成！"
     else
-        echo -e "\n${RED}推送失败，请检查网络连接或远程仓库状态${NC}"
+        print_color "$RED" "推送失败，请检查网络连接或远程仓库状态"
         show_status_and_recovery
         exit 1
     fi
@@ -365,7 +379,7 @@ commit_changes() {
 
 # 检查是否在git仓库中
 if ! git rev-parse --git-dir > /dev/null 2>&1; then
-    echo -e "${RED}错误: 当前目录不是git仓库${NC}"
+    print_color "$RED" "错误: 当前目录不是git仓库"
     exit 1
 fi
 
