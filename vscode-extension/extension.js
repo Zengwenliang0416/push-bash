@@ -38,27 +38,29 @@ const i18n = {
             pushing: '正在推送到远程仓库...',
             networkError: '连接GitHub服务器失败，请检查网络连接或代理设置',
             authError: '认证失败，请检查Git凭据设置',
-            // 代理设置
-            proxyTitle: '代理设置',
-            enableProxy: '是否启用代理？',
-            proxyHost: '请输入代理服务器地址',
-            proxyPort: '请输入代理服务器端口',
-            proxyEnabled: '代理已启用',
-            proxyDisabled: '代理已禁用',
             proxyError: '设置代理失败',
-            config: {
+            // 设置界面文本
+            settings: {
                 language: {
-                    description: '语言设置'
+                    title: '语言选择',
+                    description: '选择界面显示语言'
                 },
                 proxy: {
+                    title: '代理设置',
+                    description: '配置Git操作的代理服务器',
                     enabled: {
-                        description: '是否启用代理'
+                        title: '启用代理',
+                        description: '是否启用代理服务'
                     },
                     host: {
-                        description: '代理服务器地址'
+                        title: '代理主机',
+                        description: '代理服务器地址',
+                        placeholder: '例如: 127.0.0.1, localhost'
                     },
                     port: {
-                        description: '代理服务器端口'
+                        title: '代理端口',
+                        description: '代理服务器端口',
+                        placeholder: '例如: 7890, 1087'
                     }
                 }
             }
@@ -96,27 +98,29 @@ const i18n = {
             pushing: 'Pushing to remote repository...',
             networkError: 'Failed to connect to GitHub server, please check your network connection or proxy settings',
             authError: 'Authentication failed, please check your Git credentials',
-            // Proxy settings
-            proxyTitle: 'Proxy Settings',
-            enableProxy: 'Enable proxy?',
-            proxyHost: 'Enter proxy server address',
-            proxyPort: 'Enter proxy server port',
-            proxyEnabled: 'Proxy enabled',
-            proxyDisabled: 'Proxy disabled',
             proxyError: 'Failed to set proxy',
-            config: {
+            // Settings interface text
+            settings: {
                 language: {
-                    description: 'Language settings'
+                    title: 'Language',
+                    description: 'Select interface language'
                 },
                 proxy: {
+                    title: 'Proxy Settings',
+                    description: 'Configure proxy server for Git operations',
                     enabled: {
-                        description: 'Enable proxy'
+                        title: 'Enable Proxy',
+                        description: 'Enable proxy service'
                     },
                     host: {
-                        description: 'Proxy server address'
+                        title: 'Proxy Host',
+                        description: 'Proxy server address',
+                        placeholder: 'e.g., 127.0.0.1, localhost'
                     },
                     port: {
-                        description: 'Proxy server port'
+                        title: 'Proxy Port',
+                        description: 'Proxy server port',
+                        placeholder: 'e.g., 7890, 1087'
                     }
                 }
             }
@@ -126,8 +130,26 @@ const i18n = {
 
 // 获取当前语言
 function getCurrentLanguage() {
+    // 首先尝试获取插件的语言设置
     const config = vscode.workspace.getConfiguration('gitCommit');
-    return config.get('language', 'zh-cn');
+    const configLanguage = config.get('language');
+    
+    if (configLanguage && configLanguage !== 'system') {
+        return configLanguage;
+    }
+
+    // 如果没有设置或设置为 system，则使用 VS Code 的显示语言设置
+    const vscodeConfig = vscode.workspace.getConfiguration('locale');
+    const displayLanguage = vscodeConfig.get('locale') || vscode.env.language;
+    const vscodeLang = displayLanguage.toLowerCase();
+    
+    // 将 VS Code 的语言代码映射到我们支持的语言
+    if (vscodeLang.includes('zh') || vscodeLang.includes('chinese') || vscodeLang.includes('简体')) {
+        return 'zh-cn';
+    }
+    
+    // 默认使用英文
+    return 'en';
 }
 
 // 获取当前语言的文本
@@ -400,62 +422,167 @@ class SettingsWebviewProvider {
         const proxyHost = config.get('proxy.host', '127.0.0.1');
         const proxyPort = config.get('proxy.port', '7890');
 
+        // 获取当前语言的设置文本
+        const settingsText = i18n[currentLanguage].messages.settings;
+
         this._view.webview.html = `<!DOCTYPE html>
         <html>
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <style>
-                body { padding: 10px; }
+                body {
+                    padding: 16px;
+                    color: var(--vscode-foreground);
+                    font-family: var(--vscode-font-family);
+                    background-color: var(--vscode-sideBar-background);
+                }
+                
                 .setting-item {
-                    margin-bottom: 20px;
+                    background-color: var(--vscode-editor-background);
+                    border-radius: 6px;
+                    padding: 16px;
+                    margin-bottom: 16px;
+                    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
                 }
-                select, input {
+
+                .setting-item:hover {
+                    background-color: var(--vscode-list-hoverBackground);
+                }
+
+                .setting-header {
+                    display: flex;
+                    align-items: center;
+                    margin-bottom: 12px;
+                }
+
+                .setting-icon {
+                    width: 20px;
+                    height: 20px;
+                    margin-right: 8px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    color: var(--vscode-textLink-foreground);
+                }
+
+                .setting-title {
+                    font-size: 14px;
+                    font-weight: 600;
+                    color: var(--vscode-settings-headerForeground);
+                    margin: 0;
+                }
+
+                .setting-description {
+                    font-size: 12px;
+                    color: var(--vscode-descriptionForeground);
+                    margin-bottom: 12px;
+                }
+
+                select, input[type="text"] {
                     width: 100%;
-                    margin-top: 5px;
-                    padding: 5px;
+                    padding: 8px;
+                    border: 1px solid var(--vscode-input-border);
+                    background-color: var(--vscode-input-background);
+                    color: var(--vscode-input-foreground);
+                    border-radius: 4px;
+                    outline: none;
+                    font-size: 13px;
                 }
-                button {
-                    background-color: var(--vscode-button-background);
-                    color: var(--vscode-button-foreground);
-                    border: none;
-                    padding: 5px 10px;
-                    cursor: pointer;
-                    margin-top: 5px;
+
+                select:focus, input[type="text"]:focus {
+                    border-color: var(--vscode-focusBorder);
                 }
-                button:hover {
-                    background-color: var(--vscode-button-hoverBackground);
+
+                .checkbox-container {
+                    display: flex;
+                    align-items: center;
+                    margin-bottom: 8px;
                 }
+
+                .checkbox-container input[type="checkbox"] {
+                    margin-right: 8px;
+                }
+
                 .proxy-settings {
-                    margin-top: 10px;
+                    margin-top: 12px;
+                    padding-top: 12px;
+                    border-top: 1px solid var(--vscode-panel-border);
                     display: ${proxyEnabled ? 'block' : 'none'};
+                }
+
+                .input-group {
+                    margin-bottom: 12px;
+                }
+
+                .input-group label {
+                    display: block;
+                    margin-bottom: 6px;
+                    font-size: 12px;
+                    color: var(--vscode-foreground);
+                }
+
+                .input-hint {
+                    font-size: 11px;
+                    color: var(--vscode-descriptionForeground);
+                    margin-top: 4px;
+                }
+
+                /* 动画效果 */
+                .setting-item {
+                    transition: all 0.2s ease;
+                }
+
+                .proxy-settings {
+                    transition: all 0.3s ease;
+                }
+
+                select, input[type="text"] {
+                    transition: border-color 0.2s ease;
                 }
             </style>
         </head>
         <body>
             <div class="setting-item">
-                <label>${getText('config.language.description')}</label>
+                <div class="setting-header">
+                    <div class="setting-icon">🌍</div>
+                    <h3 class="setting-title">${settingsText.language.title}</h3>
+                </div>
+                <div class="setting-description">${settingsText.language.description}</div>
                 <select id="language">
+                    <option value="system" ${currentLanguage === 'system' ? 'selected' : ''}>
+                        ${currentLanguage === 'zh-cn' ? '跟随系统' : 'Follow System'}
+                    </option>
                     <option value="zh-cn" ${currentLanguage === 'zh-cn' ? 'selected' : ''}>中文</option>
                     <option value="en" ${currentLanguage === 'en' ? 'selected' : ''}>English</option>
                 </select>
             </div>
+
             <div class="setting-item">
-                <label>
+                <div class="setting-header">
+                    <div class="setting-icon">🔌</div>
+                    <h3 class="setting-title">${settingsText.proxy.title}</h3>
+                </div>
+                <div class="setting-description">${settingsText.proxy.description}</div>
+                <div class="checkbox-container">
                     <input type="checkbox" id="proxyEnabled" ${proxyEnabled ? 'checked' : ''}>
-                    ${getText('config.proxy.enabled.description')}
-                </label>
+                    <label for="proxyEnabled">${settingsText.proxy.enabled.description}</label>
+                </div>
+                
                 <div class="proxy-settings" id="proxySettings">
-                    <div>
-                        <label>${getText('config.proxy.host.description')}</label>
+                    <div class="input-group">
+                        <label for="proxyHost">${settingsText.proxy.host.title}</label>
                         <input type="text" id="proxyHost" value="${proxyHost}">
+                        <div class="input-hint">${settingsText.proxy.host.placeholder}</div>
                     </div>
-                    <div>
-                        <label>${getText('config.proxy.port.description')}</label>
+                    <div class="input-group">
+                        <label for="proxyPort">${settingsText.proxy.port.title}</label>
                         <input type="text" id="proxyPort" value="${proxyPort}">
+                        <div class="input-hint">${settingsText.proxy.port.placeholder}</div>
                     </div>
                 </div>
             </div>
+
             <script>
                 const vscode = acquireVsCodeApi();
                 
@@ -477,26 +604,32 @@ class SettingsWebviewProvider {
                     });
                 });
 
-                document.getElementById('proxyHost').addEventListener('change', (e) => {
-                    vscode.postMessage({
-                        command: 'updateProxy',
-                        enabled: document.getElementById('proxyEnabled').checked,
-                        host: e.target.value,
-                        port: document.getElementById('proxyPort').value
-                    });
-                });
+                const debounce = (func, wait) => {
+                    let timeout;
+                    return function executedFunction(...args) {
+                        const later = () => {
+                            clearTimeout(timeout);
+                            func(...args);
+                        };
+                        clearTimeout(timeout);
+                        timeout = setTimeout(later, wait);
+                    };
+                };
 
-                document.getElementById('proxyPort').addEventListener('change', (e) => {
+                const updateProxySettings = debounce(() => {
                     vscode.postMessage({
                         command: 'updateProxy',
                         enabled: document.getElementById('proxyEnabled').checked,
                         host: document.getElementById('proxyHost').value,
-                        port: e.target.value
+                        port: document.getElementById('proxyPort').value
                     });
-                });
+                }, 500);
+
+                document.getElementById('proxyHost').addEventListener('input', updateProxySettings);
+                document.getElementById('proxyPort').addEventListener('input', updateProxySettings);
             </script>
         </body>
-        </html>`;
+        </html>`; 
 
         this._view.webview.onDidReceiveMessage(async message => {
             const config = vscode.workspace.getConfiguration('gitCommit');
@@ -505,6 +638,7 @@ class SettingsWebviewProvider {
                 case 'updateLanguage':
                     await config.update('language', message.value, true);
                     vscode.window.showInformationMessage(getText('config.language.description'));
+                    this.updateContent(); // 刷新视图以更新语言
                     break;
                     
                 case 'updateProxy':
@@ -524,6 +658,24 @@ class SettingsWebviewProvider {
 
 async function activate(context) {
     console.log('扩展已激活');
+
+    // 监听 VS Code 语言变化
+    let currentDisplayLanguage = vscode.workspace.getConfiguration('locale').get('locale');
+
+    context.subscriptions.push(
+        vscode.workspace.onDidChangeConfiguration(e => {
+            if (e.affectsConfiguration('locale.locale') || e.affectsConfiguration('gitCommit.language')) {
+                const newDisplayLanguage = vscode.workspace.getConfiguration('locale').get('locale');
+                if (newDisplayLanguage !== currentDisplayLanguage) {
+                    currentDisplayLanguage = newDisplayLanguage;
+                    // 更新设置视图
+                    if (settingsProvider && settingsProvider._view) {
+                        settingsProvider.updateContent();
+                    }
+                }
+            }
+        })
+    );
 
     // 注册设置视图提供者
     const settingsProvider = new SettingsWebviewProvider(context);

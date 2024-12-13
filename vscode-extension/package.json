@@ -45,9 +45,14 @@
       "properties": {
         "gitCommit.language": {
           "type": "string",
-          "enum": ["zh-cn", "en"],
-          "default": "zh-cn",
-          "description": "%config.language.description%"
+          "enum": ["system", "zh-cn", "en"],
+          "default": "system",
+          "description": "%config.language.description%",
+          "enumDescriptions": [
+            "Follow VS Code language setting",
+            "Chinese (Simplified)",
+            "English"
+          ]
         },
         "gitCommit.proxy.enabled": {
           "type": "boolean",

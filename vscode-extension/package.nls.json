@@ -1,7 +1,7 @@
 {
     "command.commit.title": "Git Commit Helper: Create Commit",
     "command.setProxy.title": "Git Commit Helper: Set Proxy",
-    "config.language.description": "Language setting for Git Commit Helper",
+    "config.language.description": "Language setting (system: follow VS Code display language)",
     "config.proxy.enabled.description": "Enable proxy for Git operations",
     "config.proxy.host.description": "Proxy server host address",
     "config.proxy.port.description": "Proxy server port number",
