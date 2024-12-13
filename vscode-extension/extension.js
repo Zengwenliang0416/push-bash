@@ -97,44 +97,24 @@ async function gitCommit(message, workspaceRoot) {
 
 async function gitPush(workspaceRoot) {
     try {
-        // 检查是否已配置远程仓库
-        const { stdout: remoteUrl } = await execAsync('git remote get-url origin', { 
-            cwd: workspaceRoot 
-        }).catch(() => ({ stdout: '' }));
-
-        if (!remoteUrl.trim()) {
-            throw new Error('未配置远程仓库，请先设置 git remote');
-        }
-
-        // 获取当前分支名
-        const { stdout: branchName } = await execAsync('git rev-parse --abbrev-ref HEAD', { 
-            cwd: workspaceRoot 
-        });
-        const currentBranch = branchName.trim();
+        // 使用 VS Code 的 Git API
+        const gitExtension = vscode.extensions.getExtension('vscode.git').exports;
+        const api = gitExtension.getAPI(1);
         
-        // 执行push操作
-        const { stdout, stderr } = await execAsync(`git push -u origin ${currentBranch}`, { 
-            cwd: workspaceRoot,
-            env: { ...process.env, GIT_TRACE: '1' }
-        });
-
-        // Git可能会在stderr中输出非错误信息
-        if (stderr && stderr.includes('error:')) {
-            throw new Error(stderr);
+        // 获取当前仓库
+        const repositories = api.repositories;
+        const repo = repositories.find(r => r.rootUri.fsPath === workspaceRoot);
+        
+        if (!repo) {
+            throw new Error('未找到Git仓库');
         }
 
-        return stdout;
+        // 使用VS Code的Git API进行推送
+        await repo.push();
+        return 'Push successful';
     } catch (error) {
-        // 处理常见的Git错误
-        if (error.message.includes('Authentication failed')) {
-            throw new Error('认证失败，请检查Git凭据设置');
-        } else if (error.message.includes('Permission denied')) {
-            throw new Error('权限被拒绝，请确认您有推送权限');
-        } else if (error.message.includes('remote: Repository not found')) {
-            throw new Error('远程仓库未找到，请检查仓库URL');
-        } else {
-            throw new Error(`推送失败: ${error.message}`);
-        }
+        console.error('Push error:', error);
+        throw new Error(`推送失败: ${error.message}`);
     }
 }
 
