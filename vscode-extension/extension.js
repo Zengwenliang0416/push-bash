@@ -185,9 +185,72 @@ async function gitPush(workspaceRoot) {
     }
 }
 
+// 设置代理配置
+async function setProxyConfig() {
+    try {
+        // 获取当前配置
+        const currentConfig = await getProxyConfig();
+        
+        // 询问是否启用代理
+        const enableProxy = await vscode.window.showQuickPick(['是', '否'], {
+            placeHolder: '是否启用代理？',
+            title: '代理设置'
+        });
+        
+        if (!enableProxy) {
+            return; // 用户取消
+        }
+
+        const enabled = enableProxy === '是';
+        let host = currentConfig.host;
+        let port = currentConfig.port;
+
+        if (enabled) {
+            // 获取代理主机地址
+            host = await vscode.window.showInputBox({
+                value: currentConfig.host,
+                placeHolder: '请输入代理服务器地址',
+                prompt: '例如: 127.0.0.1',
+                title: '代理主机设置'
+            });
+
+            if (!host) {
+                return; // 用户取消
+            }
+
+            // 获取代理端口
+            port = await vscode.window.showInputBox({
+                value: currentConfig.port,
+                placeHolder: '请输入代理服务器端口',
+                prompt: '例如: 7890',
+                title: '代理端口设置'
+            });
+
+            if (!port) {
+                return; // 用户取消
+            }
+        }
+
+        // 保存配置
+        const config = vscode.workspace.getConfiguration('gitCommit');
+        await config.update('proxy.enabled', enabled, true);
+        if (enabled) {
+            await config.update('proxy.host', host, true);
+            await config.update('proxy.port', port, true);
+        }
+
+        vscode.window.showInformationMessage(`代理设置${enabled ? '已启用' : '已禁用'}`);
+    } catch (error) {
+        console.error('设置代理失败:', error);
+        vscode.window.showErrorMessage('设置代理失败: ' + error.message);
+    }
+}
+
 async function activate(context) {
     console.log('扩展已激活');
-    let disposable = vscode.commands.registerCommand('git-commit-helper.commit', async () => {
+
+    // 注册提交命令
+    let commitDisposable = vscode.commands.registerCommand('git-commit-helper.commit', async () => {
         try {
             console.log('命令开始执行');
             const workspaceRoot = vscode.workspace.workspaceFolders?.[0].uri.fsPath;
@@ -279,7 +342,10 @@ async function activate(context) {
         }
     });
 
-    context.subscriptions.push(disposable);
+    // 注册设置代理命令
+    let proxyDisposable = vscode.commands.registerCommand('git-commit-helper.setProxy', setProxyConfig);
+
+    context.subscriptions.push(commitDisposable, proxyDisposable);
 }
 
 function deactivate() {}

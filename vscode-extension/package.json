@@ -16,6 +16,10 @@
       {
         "command": "git-commit-helper.commit",
         "title": "Git: 提交更改（带表情）"
+      },
+      {
+        "command": "git-commit-helper.setProxy",
+        "title": "Git: 设置代理"
       }
     ],
     "configuration": {
