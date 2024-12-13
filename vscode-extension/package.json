@@ -1,0 +1,35 @@
+{
+  "name": "git-commit-helper",
+  "displayName": "Git Commit Helper",
+  "description": "A VS Code extension to help standardize git commits with emojis and interactive file selection",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.84.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:git-commit-helper.commit"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "git-commit-helper.commit",
+        "title": "Git: Smart Commit"
+      }
+    ]
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "pretest": "npm run lint",
+    "test": "node ./test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.84.0",
+    "@types/node": "18.x",
+    "eslint": "^8.54.0",
+    "typescript": "^5.3.2"
+  }
+}
