@@ -6,5 +6,6 @@
     "config.proxy.host.description": "代理服务器主机地址",
     "config.proxy.port.description": "代理服务器端口号",
     "viewsContainer.gitCommitHelper.title": "Git提交助手",
+    "view.commitPanel.title": "提交",
     "view.settings.title": "设置"
 }

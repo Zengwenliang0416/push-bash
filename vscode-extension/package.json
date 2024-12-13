@@ -24,6 +24,11 @@
     "views": {
       "git-commit-helper": [
         {
+          "id": "git-commit-panel",
+          "name": "%view.commitPanel.title%",
+          "type": "webview"
+        },
+        {
           "id": "git-commit-settings",
           "name": "%view.settings.title%",
           "type": "webview"
