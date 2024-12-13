@@ -97,24 +97,35 @@ async function gitCommit(message, workspaceRoot) {
 
 async function gitPush(workspaceRoot) {
     try {
-        // 使用 VS Code 的 Git API
-        const gitExtension = vscode.extensions.getExtension('vscode.git').exports;
-        const api = gitExtension.getAPI(1);
+        // 获取当前分支名
+        const { stdout: branchName } = await execAsync('git rev-parse --abbrev-ref HEAD', { 
+            cwd: workspaceRoot,
+            env: { ...process.env, GIT_TERMINAL_PROMPT: '1' }  // 允许终端提示
+        });
+        const currentBranch = branchName.trim();
         
-        // 获取当前仓库
-        const repositories = api.repositories;
-        const repo = repositories.find(r => r.rootUri.fsPath === workspaceRoot);
-        
-        if (!repo) {
-            throw new Error('未找到Git仓库');
+        // 执行push操作，使用 --porcelain 获取更详细的输出
+        const { stdout, stderr } = await execAsync(`git push -u origin ${currentBranch} --porcelain`, { 
+            cwd: workspaceRoot,
+            env: { 
+                ...process.env, 
+                GIT_TERMINAL_PROMPT: '1',  // 允许终端提示
+                GIT_TRACE: '1'  // 启用跟踪
+            }
+        });
+
+        console.log('Push stdout:', stdout);
+        if (stderr) console.log('Push stderr:', stderr);
+
+        // 检查输出中是否包含错误信息
+        if (stderr && stderr.toLowerCase().includes('error')) {
+            throw new Error(stderr);
         }
 
-        // 使用VS Code的Git API进行推送
-        await repo.push();
-        return 'Push successful';
+        return stdout;
     } catch (error) {
         console.error('Push error:', error);
-        throw new Error(`推送失败: ${error.message}`);
+        throw error;
     }
 }
 
@@ -182,8 +193,8 @@ async function activate(context) {
                     console.log('用户选择推送到远程');
                     try {
                         console.log('开始推送...');
-                        await gitPush(workspaceRoot);
-                        console.log('推送完成');
+                        const pushOutput = await gitPush(workspaceRoot);
+                        console.log('推送输出:', pushOutput);
                         vscode.window.showInformationMessage('推送成功！');
                     } catch (error) {
                         console.error('推送失败:', error);
