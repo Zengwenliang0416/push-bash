@@ -1,9 +1,7 @@
 const vscode = require('vscode');
-const { exec } = require('child_process');
+const { spawn } = require('child_process');
 const { promisify } = require('util');
-const execAsync = promisify(exec);
 
- 
 // 提交类型定义
 const COMMIT_TYPES = [
     { label: 'feat: ✨ 新功能', value: 'feat', icon: '✨' },
@@ -28,8 +26,35 @@ const COMMIT_TYPES = [
     { label: 'ui: 🎨 界面相关', value: 'ui', icon: '🎨' }
 ];
 
+// 使用 Promise 封装 spawn
+function spawnAsync(command, args, options) {
+    return new Promise((resolve, reject) => {
+        const process = spawn(command, args, options);
+        let stdout = '';
+        let stderr = '';
+
+        process.stdout.on('data', (data) => {
+            stdout += data.toString();
+        });
+
+        process.stderr.on('data', (data) => {
+            stderr += data.toString();
+        });
+
+        process.on('close', (code) => {
+            if (code === 0) {
+                resolve({ stdout, stderr });
+            } else {
+                reject(new Error(`Command failed with code ${code}\n${stderr}`));
+            }
+        });
+
+        process.on('error', reject);
+    });
+}
+
 async function getChangedFiles(workspaceRoot) {
-    const { stdout } = await execAsync('git status --porcelain', { cwd: workspaceRoot });
+    const { stdout } = await spawnAsync('git', ['status', '--porcelain'], { cwd: workspaceRoot });
     return stdout.split('\n')
         .filter(line => line.trim())
         .map(line => ({
@@ -73,54 +98,40 @@ async function getCommitMessage(type) {
 async function gitAdd(files, workspaceRoot) {
     try {
         for (const file of files) {
-            const { stdout, stderr } = await execAsync(`git add "${file}"`, { cwd: workspaceRoot });
-            if (stderr) {
-                throw new Error(`添加文件失败: ${stderr}`);
-            }
+            await spawnAsync('git', ['add', file], { cwd: workspaceRoot });
         }
     } catch (error) {
-        throw new Error(`git add 失败: ${error.message}`);
+        throw new Error(`添加文件失败: ${error.message}`);
     }
 }
 
 async function gitCommit(message, workspaceRoot) {
     try {
-        const { stdout, stderr } = await execAsync(`git commit -m "${message}"`, { cwd: workspaceRoot });
-        if (stderr) {
-            throw new Error(`提交失败: ${stderr}`);
-        }
-        return stdout;
+        await spawnAsync('git', ['commit', '-m', message], { cwd: workspaceRoot });
     } catch (error) {
-        throw new Error(`git commit 失败: ${error.message}`);
+        throw new Error(`提交失败: ${error.message}`);
     }
 }
 
 async function gitPush(workspaceRoot) {
     try {
         // 获取当前分支名
-        const { stdout: branchName } = await execAsync('git rev-parse --abbrev-ref HEAD', { 
-            cwd: workspaceRoot,
-            env: { ...process.env, GIT_TERMINAL_PROMPT: '1' }  // 允许终端提示
+        const { stdout: branchName } = await spawnAsync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { 
+            cwd: workspaceRoot 
         });
         const currentBranch = branchName.trim();
-        
-        // 执行push操作，使用 --porcelain 获取更详细的输出
-        const { stdout, stderr } = await execAsync(`git push -u origin ${currentBranch} --porcelain`, { 
+
+        // 执行push操作
+        const { stdout, stderr } = await spawnAsync('git', ['push', '-u', 'origin', currentBranch], {
             cwd: workspaceRoot,
             env: { 
-                ...process.env, 
-                GIT_TERMINAL_PROMPT: '1',  // 允许终端提示
-                GIT_TRACE: '1'  // 启用跟踪
+                ...process.env,
+                GIT_TERMINAL_PROMPT: '1'
             }
         });
 
         console.log('Push stdout:', stdout);
         if (stderr) console.log('Push stderr:', stderr);
-
-        // 检查输出中是否包含错误信息
-        if (stderr && stderr.toLowerCase().includes('error')) {
-            throw new Error(stderr);
-        }
 
         return stdout;
     } catch (error) {
@@ -192,13 +203,22 @@ async function activate(context) {
                 if (result === '是') {
                     console.log('用户选择推送到远程');
                     try {
-                        console.log('开始推送...');
-                        const pushOutput = await gitPush(workspaceRoot);
-                        console.log('推送输出:', pushOutput);
-                        vscode.window.showInformationMessage('推送成功！');
+                        // 显示进度提示
+                        await vscode.window.withProgress({
+                            location: vscode.ProgressLocation.Notification,
+                            title: "正在推送到远程仓库...",
+                            cancellable: false
+                        }, async () => {
+                            console.log('开始推送...');
+                            const pushOutput = await gitPush(workspaceRoot);
+                            console.log('推送输出:', pushOutput.stdout);
+                            vscode.window.showInformationMessage('推送成功！');
+                        });
                     } catch (error) {
                         console.error('推送失败:', error);
-                        vscode.window.showErrorMessage(`推送失败: ${error.message}`);
+                        // 显示更详细的错误信息
+                        const errorMessage = error.message || '未知错误';
+                        vscode.window.showErrorMessage(`推送失败: ${errorMessage}`);
                     }
                 } else {
                     console.log('用户选择不推送');
