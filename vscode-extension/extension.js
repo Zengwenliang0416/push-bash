@@ -96,20 +96,36 @@ async function gitCommit(message, workspaceRoot) {
 
 async function gitPush(workspaceRoot) {
     try {
+        console.log('正在获取分支名...');
         // 获取当前分支名
         const { stdout: branchName, stderr: branchErr } = await execAsync('git rev-parse --abbrev-ref HEAD', { cwd: workspaceRoot });
         if (branchErr) {
+            console.error('获取分支名错误:', branchErr);
             throw new Error(`获取分支名失败: ${branchErr}`);
         }
         const currentBranch = branchName.trim();
+        console.log('当前分支:', currentBranch);
         
         // 执行push操作
-        const { stdout, stderr } = await execAsync(`git push origin ${currentBranch}`, { cwd: workspaceRoot });
+        console.log('开始执行push操作...');
+        const { stdout, stderr } = await execAsync(`git push origin ${currentBranch}`, { 
+            cwd: workspaceRoot,
+            // 添加环境变量以显示更多信息
+            env: { ...process.env, GIT_TRACE: '1' }
+        });
+        
         if (stderr) {
-            throw new Error(`推送失败: ${stderr}`);
+            console.error('推送stderr:', stderr);
+            // git push 可能会在stderr中输出进度信息，所以不一定是错误
+            if (stderr.includes('error:')) {
+                throw new Error(`推送失败: ${stderr}`);
+            }
         }
+        
+        console.log('推送stdout:', stdout);
         return stdout;
     } catch (error) {
+        console.error('Push操作错误:', error);
         throw new Error(`git push 失败: ${error.message}`);
     }
 }
@@ -169,16 +185,21 @@ async function activate(context) {
                         cancellable: false
                     }, async (progress) => {
                         try {
+                            console.log('开始推送...');
                             const result = await gitPush(workspaceRoot);
+                            console.log('推送结果:', result);
                             vscode.window.showInformationMessage('推送成功！');
-                            return result;
                         } catch (error) {
+                            console.error('推送错误:', error);
                             vscode.window.showErrorMessage(`推送失败: ${error.message}`);
                             throw error;
                         }
                     });
+                } else {
+                    vscode.window.showInformationMessage('提交成功！(未推送到远程)');
                 }
             } catch (error) {
+                console.error('Git操作错误:', error);
                 vscode.window.showErrorMessage(`Git操作失败: ${error.message}`);
                 throw error;
             }
