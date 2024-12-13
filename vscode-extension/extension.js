@@ -131,8 +131,10 @@ async function gitPush(workspaceRoot) {
 }
 
 async function activate(context) {
+    console.log('扩展已激活');
     let disposable = vscode.commands.registerCommand('git-commit-helper.commit', async () => {
         try {
+            console.log('命令开始执行');
             const workspaceRoot = vscode.workspace.workspaceFolders?.[0].uri.fsPath;
             if (!workspaceRoot) {
                 vscode.window.showErrorMessage('请先打开一个工作区');
@@ -140,48 +142,57 @@ async function activate(context) {
             }
 
             // 获取更改的文件
+            console.log('获取更改的文件...');
             const changedFiles = await getChangedFiles(workspaceRoot);
             if (!changedFiles.length) {
-                vscode.window.showInformationMessage('没有发现需要提交的更改');
+                vscode.window.showWarningMessage('没有发现需要提交的更改');
                 return;
             }
 
             // 选择文件
+            console.log('等待用户选择文件...');
             const selectedFiles = await selectFiles(changedFiles);
             if (!selectedFiles || selectedFiles.length === 0) {
-                vscode.window.showInformationMessage('未选择任何文件');
+                vscode.window.showWarningMessage('未选择任何文件');
                 return;
             }
 
             // 选择提交类型
+            console.log('等待用户选择提交类型...');
             const commitType = await selectCommitType();
             if (!commitType) {
-                vscode.window.showInformationMessage('未选择提交类型');
+                vscode.window.showWarningMessage('未选择提交类型');
                 return;
-            } 
+            }
 
             // 获取提交信息
+            console.log('等待用户输入提交信息...');
             const commitMessage = await getCommitMessage(commitType);
             if (!commitMessage) {
-                vscode.window.showInformationMessage('未输入提交信息');
+                vscode.window.showWarningMessage('未输入提交信息');
                 return;
             }
 
             // 执行git操作
             try {
+                console.log('开始git操作...');
                 await gitAdd(selectedFiles, workspaceRoot);
+                console.log('git add完成');
                 await gitCommit(commitMessage, workspaceRoot);
-                vscode.window.showInformationMessage('提交成功！');
+                console.log('git commit完成');
 
-                // 使用消息框询问是否要推送到远程
-                const choice = await vscode.window.showInformationMessage(
-                    '是否要推送到远程仓库？',
-                    { modal: true },  // 使用模态对话框
+                // 使用showWarningMessage来确保对话框显示
+                const choice = await vscode.window.showWarningMessage(
+                    '提交成功！是否要推送到远程仓库？',
+                    { modal: true },
                     '是',
                     '否'
                 );
 
+                console.log('用户的选择:', choice);
+
                 if (choice === '是') {
+                    console.log('用户选择推送到远程');
                     await vscode.window.withProgress({
                         location: vscode.ProgressLocation.Notification,
                         title: "正在推送到远程仓库...",
@@ -191,22 +202,24 @@ async function activate(context) {
                             console.log('开始推送...');
                             const result = await gitPush(workspaceRoot);
                             console.log('推送结果:', result);
-                            vscode.window.showInformationMessage('推送成功！');
+                            await vscode.window.showInformationMessage('推送成功！');
                         } catch (error) {
                             console.error('推送错误:', error);
-                            vscode.window.showErrorMessage(`推送失败: ${error.message}`);
+                            await vscode.window.showErrorMessage(`推送失败: ${error.message}`);
                             throw error;
                         }
                     });
                 } else {
-                    vscode.window.showInformationMessage('提交成功！(未推送到远程)');
+                    console.log('用户选择不推送或关闭对话框');
+                    await vscode.window.showInformationMessage('提交成功！(未推送到远程)');
                 }
             } catch (error) {
                 console.error('Git操作错误:', error);
-                vscode.window.showErrorMessage(`Git操作失败: ${error.message}`);
+                await vscode.window.showErrorMessage(`Git操作失败: ${error.message}`);
                 throw error;
             }
         } catch (error) {
+            console.error('命令执行错误:', error);
             vscode.window.showErrorMessage(`错误: ${error.message}`);
         }
     });
