@@ -1,25 +1,43 @@
 {
   "name": "git-commit-helper",
   "displayName": "Git Commit Helper",
-  "description": "A VS Code extension to help standardize git commits with emojis and interactive file selection",
+  "description": "A VS Code extension to help with Git commits",
   "version": "0.0.1",
   "engines": {
-    "vscode": "^1.84.0"
+    "vscode": "^1.74.0"
   },
   "categories": [
     "Other"
   ],
-  "activationEvents": [
-    "onCommand:git-commit-helper.commit"
-  ],
+  "activationEvents": [],
   "main": "./extension.js",
   "contributes": {
     "commands": [
       {
         "command": "git-commit-helper.commit",
-        "title": "Git: Smart Commit"
+        "title": "Git: 提交更改（带表情）"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Git Commit Helper",
+      "properties": {
+        "gitCommit.proxy.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "是否启用代理"
+        },
+        "gitCommit.proxy.host": {
+          "type": "string",
+          "default": "127.0.0.1",
+          "description": "代理服务器主机地址"
+        },
+        "gitCommit.proxy.port": {
+          "type": "string",
+          "default": "7890",
+          "description": "代理服务器端口"
+        }
+      }
+    }
   },
   "scripts": {
     "lint": "eslint .",
@@ -27,9 +45,14 @@
     "test": "node ./test/runTest.js"
   },
   "devDependencies": {
-    "@types/vscode": "^1.84.0",
-    "@types/node": "18.x",
-    "eslint": "^8.54.0",
-    "typescript": "^5.3.2"
+    "@types/vscode": "^1.74.0",
+    "@types/glob": "^8.0.0",
+    "@types/mocha": "^10.0.1",
+    "@types/node": "16.x",
+    "eslint": "^8.28.0",
+    "glob": "^8.0.3",
+    "mocha": "^10.1.0",
+    "typescript": "^4.9.3",
+    "@vscode/test-electron": "^2.2.0"
   }
 }

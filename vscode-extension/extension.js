@@ -2,7 +2,6 @@ const vscode = require('vscode');
 const { spawn } = require('child_process');
 const { promisify } = require('util');
 
-
 // 提交类型定义
 const COMMIT_TYPES = [
     { label: 'feat: ✨ 新功能', value: 'feat', icon: '✨' },
@@ -114,6 +113,15 @@ async function gitCommit(message, workspaceRoot) {
     }
 }
 
+async function getProxyConfig() {
+    const config = vscode.workspace.getConfiguration('gitCommit');
+    return {
+        enabled: config.get('proxy.enabled', false),
+        host: config.get('proxy.host', '127.0.0.1'),
+        port: config.get('proxy.port', '7890')
+    };
+}
+
 async function gitPush(workspaceRoot) {
     try {
         // 获取当前分支名
@@ -123,17 +131,25 @@ async function gitPush(workspaceRoot) {
         });
         const currentBranch = branchName.trim();
 
-        // 设置更多的环境变量来帮助调试和处理网络问题
+        // 获取代理配置
+        const proxyConfig = await getProxyConfig();
+        
+        // 设置环境变量
         const gitEnv = {
             ...process.env,
             GIT_TERMINAL_PROMPT: '1',
             GIT_TRACE: '2',
             GIT_CURL_VERBOSE: '1',
-            GIT_TRACE_PACKET: '1',
-            // 如果你使用了代理，取消下面的注释并设置正确的代理地址
-            HTTPS_PROXY: 'http://127.0.0.1:7890',
-            HTTP_PROXY: 'http://127.0.0.1:7890'
+            GIT_TRACE_PACKET: '1'
         };
+
+        // 如果启用了代理，添加代理设置
+        if (proxyConfig.enabled) {
+            const proxyUrl = `http://${proxyConfig.host}:${proxyConfig.port}`;
+            gitEnv.HTTPS_PROXY = proxyUrl;
+            gitEnv.HTTP_PROXY = proxyUrl;
+            console.log('使用代理:', proxyUrl);
+        }
 
         // 先测试连接
         try {
