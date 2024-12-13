@@ -172,6 +172,7 @@ async function activate(context) {
                 vscode.window.showWarningMessage('未输入提交信息');
                 return;
             }
+            
 
             // 执行git操作
             try {
