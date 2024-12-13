@@ -2,6 +2,7 @@ const vscode = require('vscode');
 const { spawn } = require('child_process');
 const { promisify } = require('util');
 
+
 // 提交类型定义
 const COMMIT_TYPES = [
     { label: 'feat: ✨ 新功能', value: 'feat', icon: '✨' },
