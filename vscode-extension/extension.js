@@ -95,39 +95,15 @@ async function gitCommit(message, workspaceRoot) {
 }
 
 async function gitPush(workspaceRoot) {
-    try {
-        console.log('正在获取分支名...');
-        // 获取当前分支名
-        const { stdout: branchName, stderr: branchErr } = await execAsync('git rev-parse --abbrev-ref HEAD', { cwd: workspaceRoot });
-        if (branchErr) {
-            console.error('获取分支名错误:', branchErr);
-            throw new Error(`获取分支名失败: ${branchErr}`);
-        }
-        const currentBranch = branchName.trim();
-        console.log('当前分支:', currentBranch);
-        
-        // 执行push操作
-        console.log('开始执行push操作...');
-        const { stdout, stderr } = await execAsync(`git push origin ${currentBranch}`, { 
-            cwd: workspaceRoot,
-            // 添加环境变量以显示更多信息
-            env: { ...process.env, GIT_TRACE: '1' }
-        });
-        
-        if (stderr) {
-            console.error('推送stderr:', stderr);
-            // git push 可能会在stderr中输出进度信息，所以不一定是错误
-            if (stderr.includes('error:')) {
-                throw new Error(`推送失败: ${stderr}`);
-            }
-        }
-        
-        console.log('推送stdout:', stdout);
-        return stdout;
-    } catch (error) {
-        console.error('Push操作错误:', error);
-        throw new Error(`git push 失败: ${error.message}`);
-    }
+    // 获取当前分支名
+    const { stdout: branchName } = await execAsync('git rev-parse --abbrev-ref HEAD', { cwd: workspaceRoot });
+    const currentBranch = branchName.trim();
+    
+    // 执行push操作
+    await execAsync(`git push -u origin ${currentBranch}`, { 
+        cwd: workspaceRoot,
+        env: { ...process.env, GIT_TRACE: '1' }
+    });
 }
 
 async function activate(context) {
@@ -182,42 +158,32 @@ async function activate(context) {
                 await gitCommit(commitMessage, workspaceRoot);
                 console.log('git commit完成');
 
-                // 使用showWarningMessage来确保对话框显示
-                const choice = await vscode.window.showWarningMessage(
-                    '提交成功！是否要推送到远程仓库？',
+                // 使用简单的确认对话框
+                const result = await vscode.window.showInformationMessage(
+                    '提交成功！是否推送到远程仓库？',
                     { modal: true },
                     '是',
                     '否'
                 );
 
-                console.log('用户的选择:', choice);
-
-                if (choice === '是') {
+                if (result === '是') {
                     console.log('用户选择推送到远程');
-                    await vscode.window.withProgress({
-                        location: vscode.ProgressLocation.Notification,
-                        title: "正在推送到远程仓库...",
-                        cancellable: false
-                    }, async (progress) => {
-                        try {
-                            console.log('开始推送...');
-                            const result = await gitPush(workspaceRoot);
-                            console.log('推送结果:', result);
-                            await vscode.window.showInformationMessage('推送成功！');
-                        } catch (error) {
-                            console.error('推送错误:', error);
-                            await vscode.window.showErrorMessage(`推送失败: ${error.message}`);
-                            throw error;
-                        }
-                    });
+                    try {
+                        console.log('开始推送...');
+                        await gitPush(workspaceRoot);
+                        console.log('推送完成');
+                        vscode.window.showInformationMessage('推送成功！');
+                    } catch (error) {
+                        console.error('推送失败:', error);
+                        vscode.window.showErrorMessage(`推送失败: ${error.message}`);
+                    }
                 } else {
-                    console.log('用户选择不推送或关闭对话框');
-                    await vscode.window.showInformationMessage('提交成功！(未推送到远程)');
+                    console.log('用户选择不推送');
+                    vscode.window.showInformationMessage('提交成功！(未推送到远程)');
                 }
             } catch (error) {
                 console.error('Git操作错误:', error);
-                await vscode.window.showErrorMessage(`Git操作失败: ${error.message}`);
-                throw error;
+                vscode.window.showErrorMessage(`Git操作失败: ${error.message}`);
             }
         } catch (error) {
             console.error('命令执行错误:', error);
