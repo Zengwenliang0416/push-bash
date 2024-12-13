@@ -158,7 +158,7 @@ async function activate(context) {
             if (!commitType) {
                 vscode.window.showInformationMessage('未选择提交类型');
                 return;
-            }
+            } 
 
             // 获取提交信息
             const commitMessage = await getCommitMessage(commitType);
