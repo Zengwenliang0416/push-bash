@@ -70,22 +70,48 @@ async function getCommitMessage(type) {
 }
 
 async function gitAdd(files, workspaceRoot) {
-    for (const file of files) {
-        await execAsync(`git add "${file}"`, { cwd: workspaceRoot });
+    try {
+        for (const file of files) {
+            const { stdout, stderr } = await execAsync(`git add "${file}"`, { cwd: workspaceRoot });
+            if (stderr) {
+                throw new Error(`添加文件失败: ${stderr}`);
+            }
+        }
+    } catch (error) {
+        throw new Error(`git add 失败: ${error.message}`);
     }
 }
 
 async function gitCommit(message, workspaceRoot) {
-    await execAsync(`git commit -m "${message}"`, { cwd: workspaceRoot });
+    try {
+        const { stdout, stderr } = await execAsync(`git commit -m "${message}"`, { cwd: workspaceRoot });
+        if (stderr) {
+            throw new Error(`提交失败: ${stderr}`);
+        }
+        return stdout;
+    } catch (error) {
+        throw new Error(`git commit 失败: ${error.message}`);
+    }
 }
 
 async function gitPush(workspaceRoot) {
-    // 获取当前分支名
-    const { stdout: branchName } = await execAsync('git rev-parse --abbrev-ref HEAD', { cwd: workspaceRoot });
-    const currentBranch = branchName.trim();
-    
-    // 执行push操作
-    await execAsync(`git push origin ${currentBranch}`, { cwd: workspaceRoot });
+    try {
+        // 获取当前分支名
+        const { stdout: branchName, stderr: branchErr } = await execAsync('git rev-parse --abbrev-ref HEAD', { cwd: workspaceRoot });
+        if (branchErr) {
+            throw new Error(`获取分支名失败: ${branchErr}`);
+        }
+        const currentBranch = branchName.trim();
+        
+        // 执行push操作
+        const { stdout, stderr } = await execAsync(`git push origin ${currentBranch}`, { cwd: workspaceRoot });
+        if (stderr) {
+            throw new Error(`推送失败: ${stderr}`);
+        }
+        return stdout;
+    } catch (error) {
+        throw new Error(`git push 失败: ${error.message}`);
+    }
 }
 
 async function activate(context) {
@@ -106,46 +132,55 @@ async function activate(context) {
 
             // 选择文件
             const selectedFiles = await selectFiles(changedFiles);
-            if (!selectedFiles) {
+            if (!selectedFiles || selectedFiles.length === 0) {
+                vscode.window.showInformationMessage('未选择任何文件');
                 return;
             }
 
             // 选择提交类型
             const commitType = await selectCommitType();
             if (!commitType) {
+                vscode.window.showInformationMessage('未选择提交类型');
                 return;
             }
 
             // 获取提交信息
             const commitMessage = await getCommitMessage(commitType);
             if (!commitMessage) {
+                vscode.window.showInformationMessage('未输入提交信息');
                 return;
             }
 
             // 执行git操作
-            await gitAdd(selectedFiles, workspaceRoot);
-            await gitCommit(commitMessage, workspaceRoot);
+            try {
+                await gitAdd(selectedFiles, workspaceRoot);
+                await gitCommit(commitMessage, workspaceRoot);
+                vscode.window.showInformationMessage('提交成功！');
 
-            // 询问是否要推送到远程
-            const shouldPush = await vscode.window.showQuickPick(['是', '否'], {
-                placeHolder: '是否要推送到远程仓库？'
-            });
-
-            if (shouldPush === '是') {
-                vscode.window.withProgress({
-                    location: vscode.ProgressLocation.Notification,
-                    title: "正在推送到远程仓库...",
-                    cancellable: false
-                }, async () => {
-                    try {
-                        await gitPush(workspaceRoot);
-                        vscode.window.showInformationMessage('推送成˛功！');
-                    } catch (error) {
-                        vscode.window.showErrorMessage(`推送失败: ${error.message}`);
-                    }
+                // 询问是否要推送到远程
+                const shouldPush = await vscode.window.showQuickPick(['是', '否'], {
+                    placeHolder: '是否要推送到远程仓库？'
                 });
-            } else {
-                vscode.window.showInformationMessage('提交成功！(未推送到远程)');
+
+                if (shouldPush === '是') {
+                    await vscode.window.withProgress({
+                        location: vscode.ProgressLocation.Notification,
+                        title: "正在推送到远程仓库...",
+                        cancellable: false
+                    }, async (progress) => {
+                        try {
+                            const result = await gitPush(workspaceRoot);
+                            vscode.window.showInformationMessage('推送成功！');
+                            return result;
+                        } catch (error) {
+                            vscode.window.showErrorMessage(`推送失败: ${error.message}`);
+                            throw error;
+                        }
+                    });
+                }
+            } catch (error) {
+                vscode.window.showErrorMessage(`Git操作失败: ${error.message}`);
+                throw error;
             }
         } catch (error) {
             vscode.window.showErrorMessage(`错误: ${error.message}`);
