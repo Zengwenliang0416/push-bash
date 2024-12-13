@@ -10,7 +10,7 @@
     "Other"
   ],
   "activationEvents": [],
-  "main": "./src/extension.js",
+  "main": "./extension.js",
   "contributes": {
     "viewsContainers": {
       "activitybar": [
@@ -92,10 +92,5 @@
     "mocha": "^10.1.0",
     "typescript": "^4.9.3",
     "@vscode/test-electron": "^2.2.0"
-  },
-  "publisher": "wenliang",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/yourusername/git-commit-helper"
   }
 }
