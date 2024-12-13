@@ -1,5 +1,6 @@
 const { exec } = require('child_process');
 const util = require('util');
+const path = require('path');
 const execAsync = util.promisify(exec);
 const { getGitEnv } = require('../utils/gitUtils');
 
@@ -11,20 +12,86 @@ class GitCommands {
 
     async getChangedFiles() {
         try {
-            const { stdout } = await execAsync('git status --porcelain', { 
+            // 获取未暂存的更改
+            const { stdout: unstaged } = await execAsync('git status --porcelain', { 
                 cwd: this.workspaceRoot,
                 env: getGitEnv()
             });
-            return stdout
+
+            // 获取已暂存的更改
+            const { stdout: staged } = await execAsync('git diff --cached --name-status', {
+                cwd: this.workspaceRoot,
+                env: getGitEnv()
+            });
+
+            // 解析未暂存的文件
+            const unstagedFiles = unstaged
                 .split('\n')
                 .filter(line => line.trim())
-                .map(line => ({
-                    status: line.substring(0, 2).trim(),
-                    path: line.slice(3).trim()
-                }));
+                .map(line => {
+                    const status = line.substring(0, 2).trim();
+                    const filePath = line.slice(3).trim();
+                    const fileName = path.basename(filePath);
+                    const directory = path.dirname(filePath);
+                    
+                    return {
+                        status,
+                        path: filePath,
+                        name: fileName,
+                        directory,
+                        staged: false,
+                        type: this.getChangeType(status)
+                    };
+                });
+
+            // 解析已暂存的文件
+            const stagedFiles = staged
+                .split('\n')
+                .filter(line => line.trim())
+                .map(line => {
+                    const [status, filePath] = line.split('\t');
+                    const fileName = path.basename(filePath);
+                    const directory = path.dirname(filePath);
+                    
+                    return {
+                        status,
+                        path: filePath,
+                        name: fileName,
+                        directory,
+                        staged: true,
+                        type: this.getChangeType(status)
+                    };
+                });
+
+            // 按目录组织文件
+            const filesByDirectory = {};
+            [...unstagedFiles, ...stagedFiles].forEach(file => {
+                if (!filesByDirectory[file.directory]) {
+                    filesByDirectory[file.directory] = [];
+                }
+                filesByDirectory[file.directory].push(file);
+            });
+
+            return {
+                files: [...unstagedFiles, ...stagedFiles],
+                filesByDirectory
+            };
         } catch (error) {
             console.error('Failed to get changed files:', error);
-            return [];
+            return { files: [], filesByDirectory: {} };
+        }
+    }
+
+    getChangeType(status) {
+        switch (status.charAt(0)) {
+            case 'M': return 'modified';
+            case 'A': return 'added';
+            case 'D': return 'deleted';
+            case 'R': return 'renamed';
+            case 'C': return 'copied';
+            case 'U': return 'updated';
+            case '?': return 'untracked';
+            default: return 'unknown';
         }
     }
 
