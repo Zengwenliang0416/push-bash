@@ -173,12 +173,15 @@ async function activate(context) {
                 await gitCommit(commitMessage, workspaceRoot);
                 vscode.window.showInformationMessage('提交成功！');
 
-                // 询问是否要推送到远程
-                const shouldPush = await vscode.window.showQuickPick(['是', '否'], {
-                    placeHolder: '是否要推送到远程仓库？'
-                });
+                // 使用消息框询问是否要推送到远程
+                const choice = await vscode.window.showInformationMessage(
+                    '是否要推送到远程仓库？',
+                    { modal: true },  // 使用模态对话框
+                    '是',
+                    '否'
+                );
 
-                if (shouldPush === '是') {
+                if (choice === '是') {
                     await vscode.window.withProgress({
                         location: vscode.ProgressLocation.Notification,
                         title: "正在推送到远程仓库...",
