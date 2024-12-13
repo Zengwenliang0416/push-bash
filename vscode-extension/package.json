@@ -15,30 +15,36 @@
     "commands": [
       {
         "command": "git-commit-helper.commit",
-        "title": "Git: 提交更改（带表情）"
+        "title": "%command.commit.title%"
       },
       {
         "command": "git-commit-helper.setProxy",
-        "title": "Git: 设置代理"
+        "title": "%command.setProxy.title%"
       }
     ],
     "configuration": {
       "title": "Git Commit Helper",
       "properties": {
+        "gitCommit.language": {
+          "type": "string",
+          "enum": ["zh-cn", "en"],
+          "default": "zh-cn",
+          "description": "%config.language.description%"
+        },
         "gitCommit.proxy.enabled": {
           "type": "boolean",
           "default": false,
-          "description": "是否启用代理"
+          "description": "%config.proxy.enabled.description%"
         },
         "gitCommit.proxy.host": {
           "type": "string",
           "default": "127.0.0.1",
-          "description": "代理服务器主机地址"
+          "description": "%config.proxy.host.description%"
         },
         "gitCommit.proxy.port": {
           "type": "string",
           "default": "7890",
-          "description": "代理服务器端口"
+          "description": "%config.proxy.port.description%"
         }
       }
     }

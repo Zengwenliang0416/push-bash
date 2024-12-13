@@ -1,0 +1,8 @@
+{
+    "command.commit.title": "Git提交助手: 创建提交",
+    "command.setProxy.title": "Git提交助手: 设置代理",
+    "config.language.description": "Git提交助手的语言设置",
+    "config.proxy.enabled.description": "为Git操作启用代理",
+    "config.proxy.host.description": "代理服务器主机地址",
+    "config.proxy.port.description": "代理服务器端口号"
+}

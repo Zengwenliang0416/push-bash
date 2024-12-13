@@ -2,29 +2,114 @@ const vscode = require('vscode');
 const { spawn } = require('child_process');
 const { promisify } = require('util');
 
-// 提交类型定义
-const COMMIT_TYPES = [
-    { label: 'feat: ✨ 新功能', value: 'feat', icon: '✨' },
-    { label: 'fix: 🐛 修复bug', value: 'fix', icon: '🐛' },
-    { label: 'docs: 📝 文档更新', value: 'docs', icon: '📝' },
-    { label: 'style: 💄 代码格式', value: 'style', icon: '💄' },
-    { label: 'refactor: ♻️ 代码重构', value: 'refactor', icon: '♻️' },
-    { label: 'perf: ⚡️ 性能优化', value: 'perf', icon: '⚡️' },
-    { label: 'test: ✅ 测试相关', value: 'test', icon: '✅' },
-    { label: 'build: 📦️ 构建相关', value: 'build', icon: '📦️' },
-    { label: 'ci: 👷 CI/CD相关', value: 'ci', icon: '👷' },
-    { label: 'chore: 🔨 其他更改', value: 'chore', icon: '🔨' },
-    { label: 'init: 🎉 初始化', value: 'init', icon: '🎉' },
-    { label: 'security: 🔒 安全更新', value: 'security', icon: '🔒' },
-    { label: 'deps: 📌 依赖更新', value: 'deps', icon: '📌' },
-    { label: 'i18n: 🌐 国际化', value: 'i18n', icon: '🌐' },
-    { label: 'typo: ✍️ 拼写修正', value: 'typo', icon: '✍️' },
-    { label: 'revert: ⏪️ 回退更改', value: 'revert', icon: '⏪️' },
-    { label: 'merge: 🔀 合并分支', value: 'merge', icon: '🔀' },
-    { label: 'release: 🏷️ 发布版本', value: 'release', icon: '🏷️' },
-    { label: 'deploy: 🚀 部署相关', value: 'deploy', icon: '🚀' },
-    { label: 'ui: 🎨 界面相关', value: 'ui', icon: '🎨' }
-];
+// 国际化文本
+const i18n = {
+    'zh-cn': {
+        // 提交类型
+        commitTypes: [
+            { label: 'feat: ✨ 新功能', value: 'feat', icon: '✨' },
+            { label: 'fix: 🐛 修复', value: 'fix', icon: '🐛' },
+            { label: 'docs: 📝 文档', value: 'docs', icon: '📝' },
+            { label: 'style: 💄 格式', value: 'style', icon: '💄' },
+            { label: 'refactor: ♻️ 重构', value: 'refactor', icon: '♻️' },
+            { label: 'perf: ⚡️ 性能', value: 'perf', icon: '⚡️' },
+            { label: 'test: ✅ 测试', value: 'test', icon: '✅' },
+            { label: 'chore: 🔧 工具', value: 'chore', icon: '🔧' },
+            { label: 'revert: ⏪️ 回退', value: 'revert', icon: '⏪️' },
+            { label: 'build: 📦️ 打包', value: 'build', icon: '📦️' },
+            { label: 'ci: 👷 集成', value: 'ci', icon: '👷' },
+            { label: 'ui: 🎨 界面相关', value: 'ui', icon: '🎨' }
+        ],
+        // 提示信息
+        messages: {
+            noWorkspace: '请先打开一个工作区',
+            noChanges: '没有需要提交的更改',
+            hasUnpushedCommits: '没有需要提交的更改，但发现有未推送的提交。是否要推送到远程？',
+            selectFiles: '选择要提交的文件',
+            selectCommitType: '选择提交类型',
+            enterCommitMessage: '输入提交信息',
+            commitSuccess: '提交成功！',
+            pushSuccess: '推送成功！',
+            pushFailed: '推送失败',
+            commitFailed: '提交失败',
+            pushQuestion: '是否推送到远程仓库？',
+            yes: '是',
+            no: '否',
+            pushing: '正在推送到远程仓库...',
+            networkError: '连接GitHub服务器失败，请检查网络连接或代理设置',
+            authError: '认证失败，请检查Git凭据设置',
+            // 代理设置
+            proxyTitle: '代理设置',
+            enableProxy: '是否启用代理？',
+            proxyHost: '请输入代理服务器地址',
+            proxyPort: '请输入代理服务器端口',
+            proxyEnabled: '代理已启用',
+            proxyDisabled: '代理已禁用',
+            proxyError: '设置代理失败'
+        }
+    },
+    'en': {
+        commitTypes: [
+            { label: 'feat: ✨ New Feature', value: 'feat', icon: '✨' },
+            { label: 'fix: 🐛 Bug Fix', value: 'fix', icon: '🐛' },
+            { label: 'docs: 📝 Documentation', value: 'docs', icon: '📝' },
+            { label: 'style: 💄 Formatting', value: 'style', icon: '💄' },
+            { label: 'refactor: ♻️ Refactor', value: 'refactor', icon: '♻️' },
+            { label: 'perf: ⚡️ Performance', value: 'perf', icon: '⚡️' },
+            { label: 'test: ✅ Testing', value: 'test', icon: '✅' },
+            { label: 'chore: 🔧 Chore', value: 'chore', icon: '🔧' },
+            { label: 'revert: ⏪️ Revert', value: 'revert', icon: '⏪️' },
+            { label: 'build: 📦️ Build', value: 'build', icon: '📦️' },
+            { label: 'ci: 👷 CI', value: 'ci', icon: '👷' },
+            { label: 'ui: 🎨 UI', value: 'ui', icon: '🎨' }
+        ],
+        messages: {
+            noWorkspace: 'Please open a workspace first',
+            noChanges: 'No changes to commit',
+            hasUnpushedCommits: 'No changes to commit, but found unpushed commits. Would you like to push to remote?',
+            selectFiles: 'Select files to commit',
+            selectCommitType: 'Select commit type',
+            enterCommitMessage: 'Enter commit message',
+            commitSuccess: 'Commit successful!',
+            pushSuccess: 'Push successful!',
+            pushFailed: 'Push failed',
+            commitFailed: 'Commit failed',
+            pushQuestion: 'Push to remote repository?',
+            yes: 'Yes',
+            no: 'No',
+            pushing: 'Pushing to remote repository...',
+            networkError: 'Failed to connect to GitHub server, please check your network connection or proxy settings',
+            authError: 'Authentication failed, please check your Git credentials',
+            // Proxy settings
+            proxyTitle: 'Proxy Settings',
+            enableProxy: 'Enable proxy?',
+            proxyHost: 'Enter proxy server address',
+            proxyPort: 'Enter proxy server port',
+            proxyEnabled: 'Proxy enabled',
+            proxyDisabled: 'Proxy disabled',
+            proxyError: 'Failed to set proxy'
+        }
+    }
+};
+
+// 获取当前语言
+function getCurrentLanguage() {
+    const config = vscode.workspace.getConfiguration('gitCommit');
+    return config.get('language', 'zh-cn');
+}
+
+// 获取当前语言的文本
+function getText(key) {
+    const lang = getCurrentLanguage();
+    const messages = i18n[lang].messages;
+    return messages[key] || i18n['en'].messages[key] || key;
+}
+
+// 获取当前语言的提交类型
+function getCommitTypes() {
+    const lang = getCurrentLanguage();
+    return i18n[lang].commitTypes;
+}
 
 // 使用 Promise 封装 spawn
 function spawnAsync(command, args, options) {
@@ -72,15 +157,15 @@ async function selectFiles(changedFiles) {
 
     const selectedItems = await vscode.window.showQuickPick(items, {
         canPickMany: true,
-        placeHolder: '选择要提交的文件（可多选）'
+        placeHolder: getText('selectFiles')
     });
 
     return selectedItems ? selectedItems.map(item => item.label) : null;
 }
 
 async function selectCommitType() {
-    const selected = await vscode.window.showQuickPick(COMMIT_TYPES, {
-        placeHolder: '选择提交类型'
+    const selected = await vscode.window.showQuickPick(getCommitTypes(), {
+        placeHolder: getText('selectCommitType')
     });
 
     return selected ? selected : null;
@@ -88,8 +173,8 @@ async function selectCommitType() {
 
 async function getCommitMessage(type) {
     const message = await vscode.window.showInputBox({
-        placeHolder: '输入提交描述',
-        prompt: '请输入提交描述（不包含类型和表情）'
+        placeHolder: getText('enterCommitMessage'),
+        prompt: getText('enterCommitMessage')
     });
 
     return message ? `${type.value}: ${type.icon} ${message}` : null;
@@ -176,9 +261,9 @@ async function gitPush(workspaceRoot) {
     } catch (error) {
         console.error('Push error:', error);
         if (error.message.includes("Couldn't connect to server")) {
-            throw new Error('连接GitHub服务器失败，请检查网络连接或代理设置');
+            throw new Error(getText('networkError'));
         } else if (error.message.includes('Authentication failed')) {
-            throw new Error('认证失败，请检查Git凭据设置');
+            throw new Error(getText('authError'));
         } else {
             throw error;
         }
@@ -204,16 +289,16 @@ async function setProxyConfig() {
         const currentConfig = await getProxyConfig();
         
         // 询问是否启用代理
-        const enableProxy = await vscode.window.showQuickPick(['是', '否'], {
-            placeHolder: '是否启用代理？',
-            title: '代理设置'
+        const enableProxy = await vscode.window.showQuickPick([getText('yes'), getText('no')], {
+            placeHolder: getText('enableProxy'),
+            title: getText('proxyTitle')
         });
         
         if (!enableProxy) {
             return; // 用户取消
         }
 
-        const enabled = enableProxy === '是';
+        const enabled = enableProxy === getText('yes');
         let host = currentConfig.host;
         let port = currentConfig.port;
 
@@ -221,9 +306,9 @@ async function setProxyConfig() {
             // 获取代理主机地址
             host = await vscode.window.showInputBox({
                 value: currentConfig.host,
-                placeHolder: '请输入代理服务器地址',
-                prompt: '例如: 127.0.0.1',
-                title: '代理主机设置'
+                placeHolder: getText('proxyHost'),
+                prompt: getText('proxyHost'),
+                title: getText('proxyTitle')
             });
 
             if (!host) {
@@ -233,9 +318,9 @@ async function setProxyConfig() {
             // 获取代理端口
             port = await vscode.window.showInputBox({
                 value: currentConfig.port,
-                placeHolder: '请输入代理服务器端口',
-                prompt: '例如: 7890',
-                title: '代理端口设置'
+                placeHolder: getText('proxyPort'),
+                prompt: getText('proxyPort'),
+                title: getText('proxyTitle')
             });
 
             if (!port) {
@@ -251,10 +336,10 @@ async function setProxyConfig() {
             await config.update('proxy.port', port, true);
         }
 
-        vscode.window.showInformationMessage(`代理设置${enabled ? '已启用' : '已禁用'}`);
+        vscode.window.showInformationMessage(enabled ? getText('proxyEnabled') : getText('proxyDisabled'));
     } catch (error) {
         console.error('设置代理失败:', error);
-        vscode.window.showErrorMessage('设置代理失败: ' + error.message);
+        vscode.window.showErrorMessage(getText('proxyError') + ': ' + error.message);
     }
 }
 
@@ -268,7 +353,7 @@ async function activate(context) {
             const workspaceRoot = vscode.workspace.workspaceFolders?.[0].uri.fsPath;
             
             if (!workspaceRoot) {
-                throw new Error('未找到工作区');
+                throw new Error(getText('noWorkspace'));
             }
 
             // 获取更改的文件
@@ -280,33 +365,33 @@ async function activate(context) {
                 const hasUnpushed = await hasUnpushedCommits(workspaceRoot);
                 if (hasUnpushed) {
                     const shouldPush = await vscode.window.showInformationMessage(
-                        '没有需要提交的更改，但发现有未推送的提交。是否要推送到远程？',
+                        getText('hasUnpushedCommits'),
                         { modal: true },
-                        '是',
-                        '否'
+                        getText('yes'),
+                        getText('no')
                     );
 
-                    if (shouldPush === '是') {
+                    if (shouldPush === getText('yes')) {
                         try {
                             await vscode.window.withProgress({
                                 location: vscode.ProgressLocation.Notification,
-                                title: "正在推送到远程仓库...",
+                                title: getText('pushing'),
                                 cancellable: false
                             }, async () => {
                                 console.log('开始推送...');
                                 const pushOutput = await gitPush(workspaceRoot);
                                 console.log('推送输出:', pushOutput);
-                                vscode.window.showInformationMessage('推送成功！');
+                                vscode.window.showInformationMessage(getText('pushSuccess'));
                             });
                         } catch (error) {
                             console.error('推送失败:', error);
-                            const errorMessage = error.message || '未知错误';
-                            vscode.window.showErrorMessage(`推送失败: ${errorMessage}`);
+                            const errorMessage = error.message || getText('pushFailed');
+                            vscode.window.showErrorMessage(getText('pushFailed') + ': ' + errorMessage);
                         }
                     }
                     return;
                 }
-                vscode.window.showInformationMessage('没有需要提交的更改');
+                vscode.window.showInformationMessage(getText('noChanges'));
                 return;
             }
 
@@ -314,7 +399,7 @@ async function activate(context) {
             console.log('等待用户选择文件...');
             const selectedFiles = await selectFiles(changedFiles);
             if (!selectedFiles || selectedFiles.length === 0) {
-                vscode.window.showWarningMessage('未选择任何文件');
+                vscode.window.showWarningMessage(getText('noChanges'));
                 return;
             }
 
@@ -322,7 +407,7 @@ async function activate(context) {
             console.log('等待用户选择提交类型...');
             const commitType = await selectCommitType();
             if (!commitType) {
-                vscode.window.showWarningMessage('未选择提交类型');
+                vscode.window.showWarningMessage(getText('selectCommitType'));
                 return;
             }
 
@@ -330,7 +415,7 @@ async function activate(context) {
             console.log('等待用户输入提交信息...');
             const commitMessage = await getCommitMessage(commitType);
             if (!commitMessage) {
-                vscode.window.showWarningMessage('未输入提交信息');
+                vscode.window.showWarningMessage(getText('enterCommitMessage'));
                 return;
             }
 
@@ -344,43 +429,43 @@ async function activate(context) {
 
                 // 使用简单的确认对话框
                 const result = await vscode.window.showInformationMessage(
-                    '提交成功！是否推送到远程仓库？',
+                    getText('commitSuccess') + getText('pushQuestion'),
                     { modal: true },
-                    '是',
-                    '否'
+                    getText('yes'),
+                    getText('no')
                 );
 
-                if (result === '是') {
+                if (result === getText('yes')) {
                     console.log('用户选择推送到远程');
                     try {
                         // 显示进度提示
                         await vscode.window.withProgress({
                             location: vscode.ProgressLocation.Notification,
-                            title: "正在推送到远程仓库...",
+                            title: getText('pushing'),
                             cancellable: false
                         }, async () => {
                             console.log('开始推送...');
                             const pushOutput = await gitPush(workspaceRoot);
                             console.log('推送输出:', pushOutput.stdout);
-                            vscode.window.showInformationMessage('推送成功！');
+                            vscode.window.showInformationMessage(getText('pushSuccess'));
                         });
                     } catch (error) {
                         console.error('推送失败:', error);
                         // 显示更详细的错误信息
-                        const errorMessage = error.message || '未知错误';
-                        vscode.window.showErrorMessage(`推送失败: ${errorMessage}`);
+                        const errorMessage = error.message || getText('pushFailed');
+                        vscode.window.showErrorMessage(getText('pushFailed') + ': ' + errorMessage);
                     }
                 } else {
                     console.log('用户选择不推送');
-                    vscode.window.showInformationMessage('提交成功！(未推送到远程)');
+                    vscode.window.showInformationMessage(getText('commitSuccess'));
                 }
             } catch (error) {
                 console.error('Git操作错误:', error);
-                vscode.window.showErrorMessage(`Git操作失败: ${error.message}`);
+                vscode.window.showErrorMessage(getText('commitFailed') + ': ' + error.message);
             }
         } catch (error) {
             console.error('命令执行错误:', error);
-            vscode.window.showErrorMessage(`错误: ${error.message}`);
+            vscode.window.showErrorMessage(getText('commitFailed') + ': ' + error.message);
         }
     });
 
