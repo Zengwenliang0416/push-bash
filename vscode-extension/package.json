@@ -3,6 +3,11 @@
   "displayName": "Git Commit Helper",
   "description": "A VS Code extension to help with Git commits",
   "version": "0.0.1",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wenliang-zeng/git-commit-helper.git"
+  },
   "engines": {
     "vscode": "^1.74.0"
   },
