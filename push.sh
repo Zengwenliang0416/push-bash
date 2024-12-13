@@ -185,7 +185,7 @@ commit_changes() {
     print_color "$YELLOW" "请选择提交方式:"
     print_color "" "1. 提交所有更改 (git add .)"
     print_color "" "2. 交互式选择文件 (git add -p)"
-    print_color "" "3. 手动输入文件路径"
+    print_color "" "3. 选择已更改的文件"
     read -e -p "请选择 (1-3): " choice
 
     case $choice in
@@ -198,23 +198,54 @@ commit_changes() {
             STATUS_FILES_ADDED=true
             ;;
         3)
-            print_color "$YELLOW" "请输入要添加的文件路径（多个文件用空格分隔）:"
-            read -r file_paths
-            if [ -n "$file_paths" ]; then
-                # 使用for循环处理每个文件路径
-                for file_path in $file_paths; do
-                    if git add "$file_path" 2>/dev/null; then
-                        print_color "$GREEN" "成功添加: $file_path"
+            # 获取已更改的文件列表
+            changed_files=$(git status --porcelain | awk '{print $2}')
+            if [ -z "$changed_files" ]; then
+                print_color "$RED" "没有发现已更改的文件"
+                exit 1
+            fi
+
+            # 显示文件列表并让用户选择
+            print_color "$YELLOW" "已更改的文件列表:"
+            num=1
+            # 使用普通数组存储文件路径
+            files=()
+            while IFS= read -r file; do
+                print_color "" "$num. $file"
+                files[$((num-1))]="$file"
+                ((num++))
+            done <<< "$changed_files"
+
+            print_color "$YELLOW" "请输入要添加的文件编号（多个文件用空格分隔，输入 'a' 选择全部）:"
+            read -r selections
+
+            if [ "$selections" = "a" ]; then
+                echo "$changed_files" | while IFS= read -r file; do
+                    if git add "$file" 2>/dev/null; then
+                        print_color "$GREEN" "成功添加: $file"
                     else
-                        print_color "$RED" "添加失败: $file_path"
+                        print_color "$RED" "添加失败: $file"
                         exit 1
                     fi
                 done
-                STATUS_FILES_ADDED=true
             else
-                print_color "$RED" "错误: 文件路径不能为空"
-                exit 1
+                for selection in $selections; do
+                    index=$((selection-1))
+                    file="${files[$index]}"
+                    if [ -n "$file" ]; then
+                        if git add "$file" 2>/dev/null; then
+                            print_color "$GREEN" "成功添加: $file"
+                        else
+                            print_color "$RED" "添加失败: $file"
+                            exit 1
+                        fi
+                    else
+                        print_color "$RED" "无效的选择: $selection"
+                        exit 1
+                    fi
+                done
             fi
+            STATUS_FILES_ADDED=true
             ;;
         *)
             print_color "$RED" "错误: 无效的选择"
@@ -227,7 +258,6 @@ commit_changes() {
     git status -s
 
     # 选择提交信息类型
-    print_color "$YELLOW" "请选择提交类型:"
     declare -a commit_types=(
         "feat: ✨ 新功能"
         "fix: 🐛 修复bug"
