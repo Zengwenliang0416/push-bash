@@ -123,7 +123,7 @@ git status -s
 powershell -Command "print_color 'Yellow' '请选择提交方式:'"
 powershell -Command "print_color 'White' '1. 提交所有更改 (git add .)'"
 powershell -Command "print_color 'White' '2. 交互式选择文件 (git add -p)'"
-powershell -Command "print_color 'White' '3. 手动输入文件路径'"
+powershell -Command "print_color 'White' '3. 选择已更改的文件'"
 
 set /p choice="请选择 (1-3): "
 
@@ -134,26 +134,61 @@ if "%choice%"=="1" (
     git add -p
     set "STATUS_FILES_ADDED=true"
 ) else if "%choice%"=="3" (
-    powershell -Command "print_color 'Yellow' '请输入要添加的文件路径（多个文件用空格分隔）:'"
-    powershell -Command "$paths = Read-Host '请输入文件路径'; $paths" > "%TEMP%\paths.txt"
-    set /p file_paths=<"%TEMP%\paths.txt"
-    del "%TEMP%\paths.txt"
+    :: 获取已更改的文件列表
+    git status --porcelain > "%TEMP%\changed_files.txt"
     
-    if not "!file_paths!"=="" (
-        for %%f in (!file_paths!) do (
-            git add "%%f" 2>nul
-            if errorlevel 1 (
-                powershell -Command "print_color 'Red' '添加失败: %%f'"
-                exit /b 1
-            ) else (
-                powershell -Command "print_color 'Green' '成功添加: %%f'"
-            )
-        )
-        set "STATUS_FILES_ADDED=true"
-    ) else (
-        powershell -Command "print_color 'Red' '错误: 文件路径不能为空'"
+    :: 检查是否有更改的文件
+    for %%I in ("%TEMP%\changed_files.txt") do set size=%%~zI
+    if !size! equ 0 (
+        powershell -Command "print_color 'Red' '没有发现已更改的文件'"
+        del "%TEMP%\changed_files.txt"
         exit /b 1
     )
+
+    :: 显示文件列表
+    powershell -Command "print_color 'Yellow' '已更改的文件列表:'"
+    set "file_num=0"
+    for /f "tokens=2 delims= " %%a in ('type "%TEMP%\changed_files.txt"') do (
+        set /a "file_num+=1"
+        set "file_!file_num!=%%a"
+        powershell -Command "print_color 'White' '!file_num!. %%a'"
+    )
+
+    powershell -Command "print_color 'Yellow' '请输入要添加的文件编号（多个文件用空格分隔，输入 a 选择全部）:'"
+    set /p selections="选择: "
+
+    if /i "!selections!"=="a" (
+        for /f "tokens=2 delims= " %%a in ('type "%TEMP%\changed_files.txt"') do (
+            git add "%%a" 2>nul
+            if errorlevel 1 (
+                powershell -Command "print_color 'Red' '添加失败: %%a'"
+                del "%TEMP%\changed_files.txt"
+                exit /b 1
+            ) else (
+                powershell -Command "print_color 'Green' '成功添加: %%a'"
+            )
+        )
+    ) else (
+        for %%i in (!selections!) do (
+            set "current_file=!file_%%i!"
+            if defined current_file (
+                git add "!current_file!" 2>nul
+                if errorlevel 1 (
+                    powershell -Command "print_color 'Red' '添加失败: !current_file!'"
+                    del "%TEMP%\changed_files.txt"
+                    exit /b 1
+                ) else (
+                    powershell -Command "print_color 'Green' '成功添加: !current_file!'"
+                )
+            ) else (
+                powershell -Command "print_color 'Red' '无效的选择: %%i'"
+                del "%TEMP%\changed_files.txt"
+                exit /b 1
+            )
+        )
+    )
+    del "%TEMP%\changed_files.txt"
+    set "STATUS_FILES_ADDED=true"
 ) else (
     powershell -Command "print_color 'Red' '错误: 无效的选择'"
     exit /b 1
