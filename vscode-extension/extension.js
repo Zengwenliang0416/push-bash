@@ -118,17 +118,39 @@ async function gitPush(workspaceRoot) {
     try {
         // 获取当前分支名
         const { stdout: branchName } = await spawnAsync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { 
-            cwd: workspaceRoot 
+            cwd: workspaceRoot,
+            env: { ...process.env }
         });
         const currentBranch = branchName.trim();
 
+        // 设置更多的环境变量来帮助调试和处理网络问题
+        const gitEnv = {
+            ...process.env,
+            GIT_TERMINAL_PROMPT: '1',
+            GIT_TRACE: '2',
+            GIT_CURL_VERBOSE: '1',
+            GIT_TRACE_PACKET: '1',
+            // 如果你使用了代理，取消下面的注释并设置正确的代理地址
+            HTTPS_PROXY: 'http://127.0.0.1:7890',
+            HTTP_PROXY: 'http://127.0.0.1:7890'
+        };
+
+        // 先测试连接
+        try {
+            await spawnAsync('git', ['ls-remote', '--exit-code', 'origin'], {
+                cwd: workspaceRoot,
+                env: gitEnv
+            });
+        } catch (error) {
+            console.error('Remote connection test failed:', error);
+            throw new Error(`无法连接到远程仓库: ${error.message}`);
+        }
+
         // 执行push操作
-        const { stdout, stderr } = await spawnAsync('git', ['push', '-u', 'origin', currentBranch], {
+        const { stdout, stderr } = await spawnAsync('git', ['push', '-v', '-u', 'origin', currentBranch], {
             cwd: workspaceRoot,
-            env: { 
-                ...process.env,
-                GIT_TERMINAL_PROMPT: '1'
-            }
+            env: gitEnv,
+            timeout: 30000 // 30秒超时
         });
 
         console.log('Push stdout:', stdout);
@@ -137,7 +159,13 @@ async function gitPush(workspaceRoot) {
         return stdout;
     } catch (error) {
         console.error('Push error:', error);
-        throw error;
+        if (error.message.includes("Couldn't connect to server")) {
+            throw new Error('连接GitHub服务器失败，请检查网络连接或代理设置');
+        } else if (error.message.includes('Authentication failed')) {
+            throw new Error('认证失败，请检查Git凭据设置');
+        } else {
+            throw error;
+        }
     }
 }
 
