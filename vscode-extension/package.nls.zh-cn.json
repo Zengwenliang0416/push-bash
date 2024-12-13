@@ -4,5 +4,7 @@
     "config.language.description": "Git提交助手的语言设置",
     "config.proxy.enabled.description": "为Git操作启用代理",
     "config.proxy.host.description": "代理服务器主机地址",
-    "config.proxy.port.description": "代理服务器端口号"
+    "config.proxy.port.description": "代理服务器端口号",
+    "viewsContainer.gitCommitHelper.title": "Git提交助手",
+    "view.settings.title": "设置"
 }

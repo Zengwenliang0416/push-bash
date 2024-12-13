@@ -12,6 +12,24 @@
   "activationEvents": [],
   "main": "./extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "git-commit-helper",
+          "title": "%viewsContainer.gitCommitHelper.title%",
+          "icon": "resources/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "git-commit-helper": [
+        {
+          "id": "git-commit-settings",
+          "name": "%view.settings.title%",
+          "type": "webview"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "git-commit-helper.commit",

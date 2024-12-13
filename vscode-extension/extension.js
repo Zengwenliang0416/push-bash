@@ -45,7 +45,23 @@ const i18n = {
             proxyPort: '请输入代理服务器端口',
             proxyEnabled: '代理已启用',
             proxyDisabled: '代理已禁用',
-            proxyError: '设置代理失败'
+            proxyError: '设置代理失败',
+            config: {
+                language: {
+                    description: '语言设置'
+                },
+                proxy: {
+                    enabled: {
+                        description: '是否启用代理'
+                    },
+                    host: {
+                        description: '代理服务器地址'
+                    },
+                    port: {
+                        description: '代理服务器端口'
+                    }
+                }
+            }
         }
     },
     'en': {
@@ -87,7 +103,23 @@ const i18n = {
             proxyPort: 'Enter proxy server port',
             proxyEnabled: 'Proxy enabled',
             proxyDisabled: 'Proxy disabled',
-            proxyError: 'Failed to set proxy'
+            proxyError: 'Failed to set proxy',
+            config: {
+                language: {
+                    description: 'Language settings'
+                },
+                proxy: {
+                    enabled: {
+                        description: 'Enable proxy'
+                    },
+                    host: {
+                        description: 'Proxy server address'
+                    },
+                    port: {
+                        description: 'Proxy server port'
+                    }
+                }
+            }
         }
     }
 };
@@ -343,8 +375,161 @@ async function setProxyConfig() {
     }
 }
 
+class SettingsWebviewProvider {
+    constructor(context) {
+        this.context = context;
+        this._view = undefined;
+    }
+
+    resolveWebviewView(webviewView) {
+        this._view = webviewView;
+        webviewView.webview.options = {
+            enableScripts: true
+        };
+        this.updateContent();
+    }
+
+    async updateContent() {
+        if (!this._view) {
+            return;
+        }
+
+        const config = vscode.workspace.getConfiguration('gitCommit');
+        const currentLanguage = config.get('language', 'zh-cn');
+        const proxyEnabled = config.get('proxy.enabled', false);
+        const proxyHost = config.get('proxy.host', '127.0.0.1');
+        const proxyPort = config.get('proxy.port', '7890');
+
+        this._view.webview.html = `<!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <style>
+                body { padding: 10px; }
+                .setting-item {
+                    margin-bottom: 20px;
+                }
+                select, input {
+                    width: 100%;
+                    margin-top: 5px;
+                    padding: 5px;
+                }
+                button {
+                    background-color: var(--vscode-button-background);
+                    color: var(--vscode-button-foreground);
+                    border: none;
+                    padding: 5px 10px;
+                    cursor: pointer;
+                    margin-top: 5px;
+                }
+                button:hover {
+                    background-color: var(--vscode-button-hoverBackground);
+                }
+                .proxy-settings {
+                    margin-top: 10px;
+                    display: ${proxyEnabled ? 'block' : 'none'};
+                }
+            </style>
+        </head>
+        <body>
+            <div class="setting-item">
+                <label>${getText('config.language.description')}</label>
+                <select id="language">
+                    <option value="zh-cn" ${currentLanguage === 'zh-cn' ? 'selected' : ''}>中文</option>
+                    <option value="en" ${currentLanguage === 'en' ? 'selected' : ''}>English</option>
+                </select>
+            </div>
+            <div class="setting-item">
+                <label>
+                    <input type="checkbox" id="proxyEnabled" ${proxyEnabled ? 'checked' : ''}>
+                    ${getText('config.proxy.enabled.description')}
+                </label>
+                <div class="proxy-settings" id="proxySettings">
+                    <div>
+                        <label>${getText('config.proxy.host.description')}</label>
+                        <input type="text" id="proxyHost" value="${proxyHost}">
+                    </div>
+                    <div>
+                        <label>${getText('config.proxy.port.description')}</label>
+                        <input type="text" id="proxyPort" value="${proxyPort}">
+                    </div>
+                </div>
+            </div>
+            <script>
+                const vscode = acquireVsCodeApi();
+                
+                document.getElementById('language').addEventListener('change', (e) => {
+                    vscode.postMessage({
+                        command: 'updateLanguage',
+                        value: e.target.value
+                    });
+                });
+
+                document.getElementById('proxyEnabled').addEventListener('change', (e) => {
+                    const proxySettings = document.getElementById('proxySettings');
+                    proxySettings.style.display = e.target.checked ? 'block' : 'none';
+                    vscode.postMessage({
+                        command: 'updateProxy',
+                        enabled: e.target.checked,
+                        host: document.getElementById('proxyHost').value,
+                        port: document.getElementById('proxyPort').value
+                    });
+                });
+
+                document.getElementById('proxyHost').addEventListener('change', (e) => {
+                    vscode.postMessage({
+                        command: 'updateProxy',
+                        enabled: document.getElementById('proxyEnabled').checked,
+                        host: e.target.value,
+                        port: document.getElementById('proxyPort').value
+                    });
+                });
+
+                document.getElementById('proxyPort').addEventListener('change', (e) => {
+                    vscode.postMessage({
+                        command: 'updateProxy',
+                        enabled: document.getElementById('proxyEnabled').checked,
+                        host: document.getElementById('proxyHost').value,
+                        port: e.target.value
+                    });
+                });
+            </script>
+        </body>
+        </html>`;
+
+        this._view.webview.onDidReceiveMessage(async message => {
+            const config = vscode.workspace.getConfiguration('gitCommit');
+            
+            switch (message.command) {
+                case 'updateLanguage':
+                    await config.update('language', message.value, true);
+                    vscode.window.showInformationMessage(getText('config.language.description'));
+                    break;
+                    
+                case 'updateProxy':
+                    await config.update('proxy.enabled', message.enabled, true);
+                    if (message.enabled) {
+                        await config.update('proxy.host', message.host, true);
+                        await config.update('proxy.port', message.port, true);
+                    }
+                    vscode.window.showInformationMessage(
+                        message.enabled ? getText('proxyEnabled') : getText('proxyDisabled')
+                    );
+                    break;
+            }
+        });
+    }
+}
+
 async function activate(context) {
     console.log('扩展已激活');
+
+    // 注册设置视图提供者
+    const settingsProvider = new SettingsWebviewProvider(context);
+    context.subscriptions.push(
+        vscode.window.registerWebviewViewProvider('git-commit-settings', settingsProvider)
+    );
 
     // 注册提交命令
     let commitDisposable = vscode.commands.registerCommand('git-commit-helper.commit', async () => {
