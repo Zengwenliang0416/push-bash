@@ -185,6 +185,18 @@ async function gitPush(workspaceRoot) {
     }
 }
 
+// 检查是否有未推送的提交
+async function hasUnpushedCommits(workspaceRoot) {
+    try {
+        const { stdout } = await spawnAsync('git', ['status', '-sb'], { cwd: workspaceRoot });
+        // 检查输出中是否包含 "ahead" 字样，表示有未推送的提交
+        return stdout.includes('ahead');
+    } catch (error) {
+        console.error('检查未推送提交失败:', error);
+        return false;
+    }
+}
+
 // 设置代理配置
 async function setProxyConfig() {
     try {
@@ -254,16 +266,47 @@ async function activate(context) {
         try {
             console.log('命令开始执行');
             const workspaceRoot = vscode.workspace.workspaceFolders?.[0].uri.fsPath;
+            
             if (!workspaceRoot) {
-                vscode.window.showErrorMessage('请先打开一个工作区');
-                return;
+                throw new Error('未找到工作区');
             }
 
             // 获取更改的文件
-            console.log('获取更改的文件...');
             const changedFiles = await getChangedFiles(workspaceRoot);
-            if (!changedFiles.length) {
-                vscode.window.showWarningMessage('没有发现需要提交的更改');
+            console.log('更改的文件:', changedFiles);
+
+            if (changedFiles.length === 0) {
+                // 检查是否有未推送的提交
+                const hasUnpushed = await hasUnpushedCommits(workspaceRoot);
+                if (hasUnpushed) {
+                    const shouldPush = await vscode.window.showInformationMessage(
+                        '没有需要提交的更改，但发现有未推送的提交。是否要推送到远程？',
+                        { modal: true },
+                        '是',
+                        '否'
+                    );
+
+                    if (shouldPush === '是') {
+                        try {
+                            await vscode.window.withProgress({
+                                location: vscode.ProgressLocation.Notification,
+                                title: "正在推送到远程仓库...",
+                                cancellable: false
+                            }, async () => {
+                                console.log('开始推送...');
+                                const pushOutput = await gitPush(workspaceRoot);
+                                console.log('推送输出:', pushOutput);
+                                vscode.window.showInformationMessage('推送成功！');
+                            });
+                        } catch (error) {
+                            console.error('推送失败:', error);
+                            const errorMessage = error.message || '未知错误';
+                            vscode.window.showErrorMessage(`推送失败: ${errorMessage}`);
+                        }
+                    }
+                    return;
+                }
+                vscode.window.showInformationMessage('没有需要提交的更改');
                 return;
             }
 
@@ -291,7 +334,6 @@ async function activate(context) {
                 return;
             }
 
-  
             // 执行git操作
             try {
                 console.log('开始git操作...');
