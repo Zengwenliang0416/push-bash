@@ -918,6 +918,20 @@ class CommitPanelProvider {
 async function activate(context) {
     console.log('扩展已激活');
 
+    // 应用默认设置
+    const config = vscode.workspace.getConfiguration('gitCommit');
+    const defaultSettings = {
+        'language': config.get('language') || 'system',
+        'proxy.enabled': config.get('proxy.enabled') || false,
+        'proxy.host': config.get('proxy.host') || '',
+        'proxy.port': config.get('proxy.port') || ''
+    };
+
+    // 更新配置
+    for (const [key, value] of Object.entries(defaultSettings)) {
+        await config.update(key, value, vscode.ConfigurationTarget.Global);
+    }
+
     // 监听 VS Code 语言变化
     let currentDisplayLanguage = vscode.workspace.getConfiguration('locale').get('locale');
 
