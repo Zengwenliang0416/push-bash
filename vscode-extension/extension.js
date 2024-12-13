@@ -71,7 +71,10 @@ function spawnAsync(command, args, options) {
 // Git 相关的工具函数
 async function getChangedFiles(workspaceRoot) {
     try {
-        const { stdout } = await execAsync('git status --porcelain', { cwd: workspaceRoot });
+        const { stdout } = await execAsync('git status --porcelain', { 
+            cwd: workspaceRoot,
+            env: getGitEnv()
+        });
         return stdout
             .split('\n')
             .filter(line => line.trim())
@@ -87,7 +90,10 @@ async function getChangedFiles(workspaceRoot) {
 
 async function getFileDiff(filePath, workspaceRoot) {
     try {
-        const { stdout } = await execAsync(`git diff -- "${filePath}"`, { cwd: workspaceRoot });
+        const { stdout } = await execAsync(`git diff -- "${filePath}"`, { 
+            cwd: workspaceRoot,
+            env: getGitEnv()
+        });
         return stdout;
     } catch (error) {
         console.error('获取文件差异失败:', error);
@@ -97,9 +103,11 @@ async function getFileDiff(filePath, workspaceRoot) {
 
 async function gitAdd(files, workspaceRoot) {
     try {
-        for (const file of files) {
-            await execAsync(`git add "${file}"`, { cwd: workspaceRoot });
-        }
+        const fileList = files.join(' ');
+        await execAsync(`git add ${fileList}`, { 
+            cwd: workspaceRoot,
+            env: getGitEnv()
+        });
     } catch (error) {
         throw new Error(`Git add failed: ${error.message}`);
     }
@@ -107,7 +115,10 @@ async function gitAdd(files, workspaceRoot) {
 
 async function gitCommit(message, workspaceRoot) {
     try {
-        await execAsync(`git commit -m "${message}"`, { cwd: workspaceRoot });
+        await execAsync(`git commit -m "${message}"`, { 
+            cwd: workspaceRoot,
+            env: getGitEnv()
+        });
     } catch (error) {
         throw new Error(`Git commit failed: ${error.message}`);
     }
@@ -115,7 +126,10 @@ async function gitCommit(message, workspaceRoot) {
 
 async function gitPush(workspaceRoot) {
     try {
-        await execAsync('git push', { cwd: workspaceRoot });
+        await execAsync('git push', { 
+            cwd: workspaceRoot,
+            env: getGitEnv()
+        });
     } catch (error) {
         throw new Error(`Git push failed: ${error.message}`);
     }
@@ -123,11 +137,35 @@ async function gitPush(workspaceRoot) {
 
 async function hasUnpushedCommits(workspaceRoot) {
     try {
-        const { stdout } = await execAsync('git log @{u}..HEAD', { cwd: workspaceRoot });
+        const { stdout } = await execAsync('git log @{u}..', { 
+            cwd: workspaceRoot,
+            env: getGitEnv()
+        });
         return !!stdout.trim();
     } catch (error) {
         return false;
     }
+}
+
+// 获取带代理的环境变量
+function getGitEnv() {
+    const config = vscode.workspace.getConfiguration('gitCommit');
+    const proxyEnabled = config.get('proxy.enabled');
+    const proxyHost = config.get('proxy.host');
+    const proxyPort = config.get('proxy.port');
+
+    if (proxyEnabled && proxyHost && proxyPort) {
+        const proxyUrl = `http://${proxyHost}:${proxyPort}`;
+        return {
+            ...process.env,
+            'HTTP_PROXY': proxyUrl,
+            'HTTPS_PROXY': proxyUrl,
+            'http_proxy': proxyUrl,
+            'https_proxy': proxyUrl
+        };
+    }
+
+    return process.env;
 }
 
 // 提交类型列表
