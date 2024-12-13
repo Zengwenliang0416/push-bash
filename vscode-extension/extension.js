@@ -173,7 +173,7 @@ async function activate(context) {
                 return;
             }
 
- 
+  
             // 执行git操作
             try {
                 console.log('开始git操作...');
