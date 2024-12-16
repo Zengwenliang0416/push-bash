@@ -199,28 +199,29 @@ commit_changes() {
             ;;
         3)
             # 获取已更改的文件列表
-            changed_files=$(git status --porcelain | awk '{print $2}')
-            if [ -z "$changed_files" ]; then
+            files=()
+            while IFS= read -r line; do
+                file="${line#???}"
+                files+=("$file")
+            done < <(git status --porcelain)
+            
+            if [ ${#files[@]} -eq 0 ]; then
                 print_color "$RED" "没有发现已更改的文件"
                 exit 1
             fi
 
             # 显示文件列表并让用户选择
             print_color "$YELLOW" "已更改的文件列表:"
-            num=1
-            # 使用普通数组存储文件路径
-            files=()
-            while IFS= read -r file; do
-                print_color "" "$num. $file"
-                files[$((num-1))]="$file"
-                ((num++))
-            done <<< "$changed_files"
+            for i in "${!files[@]}"; do
+                num=$((i + 1))
+                print_color "" "$num. ${files[$i]}"
+            done
 
             print_color "$YELLOW" "请输入要添加的文件编号（多个文件用空格分隔，输入 'a' 选择全部）:"
             read -r selections
 
             if [ "$selections" = "a" ]; then
-                echo "$changed_files" | while IFS= read -r file; do
+                for file in "${files[@]}"; do
                     if git add "$file" 2>/dev/null; then
                         print_color "$GREEN" "成功添加: $file"
                     else
@@ -231,8 +232,8 @@ commit_changes() {
             else
                 for selection in $selections; do
                     index=$((selection-1))
-                    file="${files[$index]}"
-                    if [ -n "$file" ]; then
+                    if [ "$index" -ge 0 ] && [ "$index" -lt "${#files[@]}" ]; then
+                        file="${files[$index]}"
                         if git add "$file" 2>/dev/null; then
                             print_color "$GREEN" "成功添加: $file"
                         else
