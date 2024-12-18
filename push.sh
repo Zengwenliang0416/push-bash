@@ -167,6 +167,35 @@ show_main_menu() {
 
 # 提交更改函数
 commit_changes() {
+    # 检查远程仓库更新
+    print_color "$BLUE" "正在检查远程仓库更新..."
+    
+    # 获取当前分支名
+    STATUS_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+    
+    # 获取远程更新
+    git fetch origin
+    
+    # 检查本地分支与远程分支的差异
+    LOCAL=$(git rev-parse @)
+    REMOTE=$(git rev-parse @{u})
+    BASE=$(git merge-base @ @{u})
+    
+    if [ "$REMOTE" = "$BASE" ]; then
+        # 本地领先于远程，可以继续
+        print_color "$GREEN" "本地仓库已是最新"
+    elif [ "$LOCAL" = "$BASE" ]; then
+        # 远程领先于本地，需要更新
+        print_color "$YELLOW" "检测到远程仓库有更新，正在拉取..."
+        git pull origin "$STATUS_BRANCH"
+        print_color "$GREEN" "成功更新本地仓库"
+    else
+        # 分支已经分叉
+        print_color "$RED" "警告：本地和远程仓库已经分叉"
+        print_color "$YELLOW" "建议先手动解决冲突后再继续"
+        exit 1
+    fi
+
     # 检查是否有未提交的更改
     if [ -z "$(git status --porcelain)" ]; then
         print_color "$YELLOW" "没有发现需要提交的更改"
