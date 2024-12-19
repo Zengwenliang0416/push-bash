@@ -437,11 +437,33 @@ commit_changes() {
     fi
 }
 
+# 自动处理未暂存的更改
+handle_unstaged_changes() {
+    if [[ -n $(git status -s) ]]; then
+        print_color "$YELLOW" "检测到未暂存的更改..."
+        # 自动暂存所有更改
+        git add .
+        STATUS_FILES_ADDED=true
+        print_color "$GREEN" "已自动暂存所有更改"
+        
+        # 自动提交
+        local timestamp=$(date "+%Y-%m-%d %H:%M:%S")
+        git commit -m "自动提交: $timestamp"
+        STATUS_CHANGES_COMMITTED=true
+        STATUS_COMMIT_HASH=$(git rev-parse HEAD)
+        STATUS_COMMIT_MESSAGE="自动提交: $timestamp"
+        print_color "$GREEN" "已自动提交更改"
+    fi
+}
+
 # 检查是否在git仓库中
 if ! git rev-parse --git-dir > /dev/null 2>&1; then
     print_color "$RED" "错误: 当前目录不是git仓库"
     exit 1
 fi
+
+# 在检查远程更新之前处理未暂存的更改
+handle_unstaged_changes
 
 # 获取当前分支
 current_branch=$(git rev-parse --abbrev-ref HEAD)
