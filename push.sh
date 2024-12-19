@@ -115,6 +115,150 @@ revert_commit() {
     fi
 }
 
+# 处理仓库分叉情况
+handle_diverged_branches() {
+    local current_branch=$1
+    
+    # 获取本地和远程的提交数量差异
+    local ahead_behind=$(git rev-list --left-right --count HEAD...origin/$current_branch)
+    local ahead=$(echo $ahead_behind | cut -f1)
+    local behind=$(echo $ahead_behind | cut -f2)
+    
+    print_color "$YELLOW" "检测到本地和远程仓库已分叉"
+    print_color "$BLUE" "本地领先 $ahead 个提交，落后 $behind 个提交"
+    
+    # 如果本地落后较多，建议使用rebase
+    if [ $behind -gt $ahead ]; then
+        print_color "$YELLOW" "建议使用变基(rebase)来同步远程更改..."
+        read -p "是否执行变基操作？(Y/n): " choice
+        choice=${choice:-Y}
+        
+        if [[ $choice =~ ^[Yy]$ ]]; then
+            print_color "$BLUE" "正在变基到远程更改..."
+            if git rebase "origin/$current_branch"; then
+                print_color "$GREEN" "变基成功"
+                return 0
+            else
+                print_color "$RED" "变基过程中遇到冲突"
+                print_color "$YELLOW" "请手动解决冲突后运行 'git rebase --continue'"
+                exit 1
+            fi
+        fi
+    fi
+    
+    # 显示其他选项
+    print_color "$BLUE" "请选择处理方式："
+    echo "1) 合并远程更改 (git merge)"
+    echo "2) 变基到远程更改 (git rebase)"
+    echo "3) 强制推送本地更改 (git push --force)"
+    echo "4) 退出并手动处理"
+    
+    read -p "请输入选项 (1-4): " choice
+    
+    case $choice in
+        1)
+            print_color "$YELLOW" "正在合并远程更改..."
+            if git merge "origin/$current_branch"; then
+                print_color "$GREEN" "合并成功"
+            else
+                print_color "$RED" "合并过程中遇到冲突"
+                print_color "$YELLOW" "请手动解决冲突后提交更改"
+                exit 1
+            fi
+            ;;
+        2)
+            print_color "$YELLOW" "正在变基到远程更改..."
+            if git rebase "origin/$current_branch"; then
+                print_color "$GREEN" "变基成功"
+            else
+                print_color "$RED" "变基过程中遇到冲突"
+                print_color "$YELLOW" "请手动解决冲突后运行 'git rebase --continue'"
+                exit 1
+            fi
+            ;;
+        3)
+            print_color "$RED" "警告：强制推送将覆盖远程 $behind 个提交！"
+            read -p "确定要继续吗？(y/N): " confirm
+            if [[ $confirm == [yY] ]]; then
+                git push --force origin "$current_branch"
+                print_color "$GREEN" "强制推送成功"
+            else
+                print_color "$YELLOW" "操作已取消"
+                exit 0
+            fi
+            ;;
+        4)
+            print_color "$YELLOW" "已退出。请手动解决冲突后再运行脚本"
+            exit 0
+            ;;
+        *)
+            print_color "$RED" "无效的选项"
+            exit 1
+            ;;
+    esac
+}
+
+# 获取提交类型和表情
+get_commit_type() {
+    print_color "$BLUE" "请选择提交类型："
+    echo "1) ✨ feat: 新功能"
+    echo "2) 🐛 fix: 修复"
+    echo "3) 📝 docs: 文档"
+    echo "4) 🎨 style: 格式"
+    echo "5) ♻️ refactor: 重构"
+    echo "6) ⚡️ perf: 性能"
+    echo "7) ✅ test: 测试"
+    echo "8) 🔧 chore: 构建"
+    echo "9) 🚀 ci: 集成"
+    echo "0) 💾 auto: 自动提交"
+    
+    read -p "请选择提交类型 (0-9): " type_choice
+    
+    case $type_choice in
+        1) echo "✨ feat: ";;
+        2) echo "🐛 fix: ";;
+        3) echo "📝 docs: ";;
+        4) echo "🎨 style: ";;
+        5) echo "♻️ refactor: ";;
+        6) echo "⚡️ perf: ";;
+        7) echo "✅ test: ";;
+        8) echo "🔧 chore: ";;
+        9) echo "🚀 ci: ";;
+        *) echo "💾 auto: ";;
+    esac
+}
+
+# 自动处理未暂存的更改
+handle_unstaged_changes() {
+    if [[ -n $(git status -s) ]]; then
+        print_color "$YELLOW" "检测到未暂存的更改..."
+        
+        # 获取工作目录中的更改
+        local changes=$(git status --porcelain)
+        
+        # 自动暂存所有更改
+        git add -A
+        STATUS_FILES_ADDED=true
+        print_color "$GREEN" "已自动暂存所有更改"
+        
+        # 获取提交类型和表情
+        local commit_prefix=$(get_commit_type)
+        
+        # 自动提交
+        local timestamp=$(date "+%Y-%m-%d %H:%M:%S")
+        local commit_msg="${commit_prefix}自动提交于 $timestamp\n\n更改文件:\n$changes"
+        git commit -m "$commit_msg"
+        STATUS_CHANGES_COMMITTED=true
+        STATUS_COMMIT_HASH=$(git rev-parse HEAD)
+        STATUS_COMMIT_MESSAGE="$commit_msg"
+        print_color "$GREEN" "已自动提交更改"
+        
+        # 显示提交信息
+        print_color "$BLUE" "提交详情："
+        git show --stat HEAD
+    fi
+}
+
 # 主菜单函数
 show_main_menu() {
     while true; do
@@ -190,10 +334,7 @@ commit_changes() {
         git pull origin "$STATUS_BRANCH"
         print_color "$GREEN" "成功更新本地仓库"
     else
-        # 分支已经分叉
-        print_color "$RED" "警告：本地和远程仓库已经分叉"
-        print_color "$YELLOW" "建议先手动解决冲突后再继续"
-        exit 1
+        handle_diverged_branches "$STATUS_BRANCH"
     fi
 
     # 检查是否有未提交的更改
@@ -434,25 +575,6 @@ commit_changes() {
         print_color "$RED" "推送失败，请检查网络连接或远程仓库状态"
         show_status_and_recovery
         exit 1
-    fi
-}
-
-# 自动处理未暂存的更改
-handle_unstaged_changes() {
-    if [[ -n $(git status -s) ]]; then
-        print_color "$YELLOW" "检测到未暂存的更改..."
-        # 自动暂存所有更改
-        git add .
-        STATUS_FILES_ADDED=true
-        print_color "$GREEN" "已自动暂存所有更改"
-        
-        # 自动提交
-        local timestamp=$(date "+%Y-%m-%d %H:%M:%S")
-        git commit -m "自动提交: $timestamp"
-        STATUS_CHANGES_COMMITTED=true
-        STATUS_COMMIT_HASH=$(git rev-parse HEAD)
-        STATUS_COMMIT_MESSAGE="自动提交: $timestamp"
-        print_color "$GREEN" "已自动提交更改"
     fi
 }
 
