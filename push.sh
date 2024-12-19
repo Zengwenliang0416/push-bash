@@ -19,7 +19,7 @@ NC='\033[0m' # No Color
 
 # 定义打印彩色文本的函数
 print_color() {
-    printf "%b%s%b\n" "$1" "$2" "$NC"
+    printf "%b%s%b\n" "$1" "$2" "$NC" >&2
 }
 
 # 记录操作状态的变量
@@ -115,147 +115,217 @@ revert_commit() {
     fi
 }
 
-# 处理仓库分叉情况
+# 处理分叉的分支
 handle_diverged_branches() {
-    local current_branch=$1
-    
-    # 获取本地和远程的提交数量差异
-    local ahead_behind=$(git rev-list --left-right --count HEAD...origin/$current_branch)
-    local ahead=$(echo $ahead_behind | cut -f1)
-    local behind=$(echo $ahead_behind | cut -f2)
+    local ahead=$1
+    local behind=$2
     
     print_color "$YELLOW" "检测到本地和远程仓库已分叉"
     print_color "$BLUE" "本地领先 $ahead 个提交，落后 $behind 个提交"
     
-    # 如果本地落后较多，建议使用rebase
-    if [ $behind -gt $ahead ]; then
-        print_color "$YELLOW" "建议使用变基(rebase)来同步远程更改..."
-        read -p "是否执行变基操作？(Y/n): " choice
-        choice=${choice:-Y}
-        
-        if [[ $choice =~ ^[Yy]$ ]]; then
-            print_color "$BLUE" "正在变基到远程更改..."
-            if git rebase "origin/$current_branch"; then
-                print_color "$GREEN" "变基成功"
-                return 0
-            else
-                print_color "$RED" "变基过程中遇到冲突"
-                print_color "$YELLOW" "请手动解决冲突后运行 'git rebase --continue'"
-                exit 1
-            fi
-        fi
+    # 先处理未暂存的更改
+    local changes=$(git status --porcelain)
+    if [[ -n $changes ]]; then
+        print_color "$YELLOW" "检测到未暂存的更改，先进行提交..."
+        handle_unstaged_changes
     fi
     
-    # 显示其他选项
-    print_color "$BLUE" "请选择处理方式："
+    # 现在处理分支分叉
+    echo "请选择处理方式："
     echo "1) 合并远程更改 (git merge)"
     echo "2) 变基到远程更改 (git rebase)"
     echo "3) 强制推送本地更改 (git push --force)"
     echo "4) 退出并手动处理"
     
-    read -p "请输入选项 (1-4): " choice
+    local choice
+    while true; do
+        read -p "请输入选项 (1-4): " choice
+        case $choice in
+            1)
+                print_color "$BLUE" "正在合并远程更改..."
+                if git merge "origin/$(git rev-parse --abbrev-ref HEAD)"; then
+                    print_color "$GREEN" "合并成功"
+                    git push origin "$(git rev-parse --abbrev-ref HEAD)"
+                    exit 0
+                else
+                    print_color "$RED" "合并过程中遇到冲突"
+                    print_color "$YELLOW" "请手动解决冲突后重新运行此脚本"
+                    exit 1
+                fi
+                ;;
+            2)
+                print_color "$BLUE" "正在变基到远程更改..."
+                if git rebase "origin/$(git rev-parse --abbrev-ref HEAD)"; then
+                    print_color "$GREEN" "变基成功"
+                    git push origin "$(git rev-parse --abbrev-ref HEAD)" --force-with-lease
+                    exit 0
+                else
+                    print_color "$RED" "变基过程中遇到冲突"
+                    print_color "$YELLOW" "请手动解决冲突后运行 'git rebase --continue'"
+                    exit 1
+                fi
+                ;;
+            3)
+                print_color "$RED" "警告：强制推送可能会覆盖远程更改"
+                read -p "确定要继续吗？(y/n): " confirm
+                if [[ $confirm =~ ^[Yy]$ ]]; then
+                    git push origin "$(git rev-parse --abbrev-ref HEAD)" --force-with-lease
+                    exit 0
+                else
+                    print_color "$YELLOW" "操作已取消"
+                    exit 1
+                fi
+                ;;
+            4)
+                print_color "$YELLOW" "已退出，请手动处理分支分叉"
+                exit 1
+                ;;
+            *)
+                print_color "$RED" "无效的选项，请重新选择"
+                ;;
+        esac
+    done
+}
+
+# 检查远程更新
+check_remote_updates() {
+    print_color "$BLUE" "正在检查远程仓库更新..."
     
-    case $choice in
-        1)
-            print_color "$YELLOW" "正在合并远程更改..."
-            if git merge "origin/$current_branch"; then
-                print_color "$GREEN" "合并成功"
-            else
-                print_color "$RED" "合并过程中遇到冲突"
-                print_color "$YELLOW" "请手动解决冲突后提交更改"
-                exit 1
-            fi
-            ;;
-        2)
-            print_color "$YELLOW" "正在变基到远程更改..."
-            if git rebase "origin/$current_branch"; then
-                print_color "$GREEN" "变基成功"
-            else
-                print_color "$RED" "变基过程中遇到冲突"
-                print_color "$YELLOW" "请手动解决冲突后运行 'git rebase --continue'"
-                exit 1
-            fi
-            ;;
-        3)
-            print_color "$RED" "警告：强制推送将覆盖远程 $behind 个提交！"
-            read -p "确定要继续吗？(y/N): " confirm
-            if [[ $confirm == [yY] ]]; then
-                git push --force origin "$current_branch"
-                print_color "$GREEN" "强制推送成功"
-            else
-                print_color "$YELLOW" "操作已取消"
-                exit 0
-            fi
-            ;;
-        4)
-            print_color "$YELLOW" "已退出。请手动解决冲突后再运行脚本"
-            exit 0
-            ;;
-        *)
-            print_color "$RED" "无效的选项"
-            exit 1
-            ;;
-    esac
+    # 获取远程更新
+    git fetch origin
+    
+    # 获取当前分支
+    local current_branch=$(git rev-parse --abbrev-ref HEAD)
+    
+    # 检查是否有未暂存的更改
+    local changes=$(git status --porcelain)
+    
+    # 获取本地和远程的提交差异
+    local ahead=$(git rev-list "origin/$current_branch..$current_branch" --count)
+    local behind=$(git rev-list "$current_branch..origin/$current_branch" --count)
+    
+    # 如果有未暂存的更改，先处理它们
+    if [[ -n $changes ]]; then
+        handle_unstaged_changes
+        # 重新获取提交差异
+        ahead=$(git rev-list "origin/$current_branch..$current_branch" --count)
+        behind=$(git rev-list "$current_branch..origin/$current_branch" --count)
+    fi
+    
+    # 检查分支是否分叉
+    if [[ $ahead -gt 0 && $behind -gt 0 ]]; then
+        handle_diverged_branches "$ahead" "$behind"
+    elif [[ $behind -gt 0 ]]; then
+        print_color "$YELLOW" "检测到远程仓库有更新"
+        handle_remote_updates
+    elif [[ $ahead -gt 0 ]]; then
+        print_color "$GREEN" "本地领先远程 $ahead 个提交"
+        git push origin "$current_branch"
+    else
+        print_color "$GREEN" "本地和远程仓库已同步"
+    fi
 }
 
 # 获取提交类型和表情
 get_commit_type() {
-    print_color "$BLUE" "请选择提交类型："
-    echo "1) ✨ feat: 新功能"
-    echo "2) 🐛 fix: 修复"
-    echo "3) 📝 docs: 文档"
-    echo "4) 🎨 style: 格式"
-    echo "5) ♻️ refactor: 重构"
-    echo "6) ⚡️ perf: 性能"
-    echo "7) ✅ test: 测试"
-    echo "8) 🔧 chore: 构建"
-    echo "9) 🚀 ci: 集成"
-    echo "0) 💾 auto: 自动提交"
+    local type_choice
     
-    read -p "请选择提交类型 (0-9): " type_choice
+    # 显示菜单到stderr
+    print_color "$BLUE" "\n=== 请选择提交类型 ===" >&2
+    cat >&2 << EOF
+1) ✨ feat: 新功能
+2) 🐛 fix: 修复
+3) 📝 docs: 文档
+4) 🎨 style: 格式
+5) ♻️ refactor: 重构
+6) ⚡️ perf: 性能
+7) ✅ test: 测试
+8) 🔧 chore: 构建
+9) 🚀 ci: 集成
+0) 💾 auto: 自动提交
+EOF
+    echo >&2
     
-    case $type_choice in
-        1) echo "✨ feat: ";;
-        2) echo "🐛 fix: ";;
-        3) echo "📝 docs: ";;
-        4) echo "🎨 style: ";;
-        5) echo "♻️ refactor: ";;
-        6) echo "⚡️ perf: ";;
-        7) echo "✅ test: ";;
-        8) echo "🔧 chore: ";;
-        9) echo "🚀 ci: ";;
-        *) echo "💾 auto: ";;
-    esac
+    while true; do
+        read -p "请选择提交类型 (0-9): " type_choice < /dev/tty
+        
+        case $type_choice in
+            1) printf "✨ feat: "; return;;
+            2) printf "🐛 fix: "; return;;
+            3) printf "📝 docs: "; return;;
+            4) printf "🎨 style: "; return;;
+            5) printf "♻️ refactor: "; return;;
+            6) printf "⚡️ perf: "; return;;
+            7) printf "✅ test: "; return;;
+            8) printf "🔧 chore: "; return;;
+            9) printf "🚀 ci: "; return;;
+            0) printf "💾 auto: "; return;;
+            *) print_color "$RED" "无效的选项，请重新选择" >&2;;
+        esac
+    done
+}
+
+# 处理远程分支更新
+handle_remote_updates() {
+    # 先尝试拉取远程更新
+    print_color "$BLUE" "正在拉取远程更新..."
+    if ! git pull origin "$(git rev-parse --abbrev-ref HEAD)"; then
+        print_color "$RED" "拉取远程更新失败，请手动解决冲突"
+        exit 1
+    fi
+    print_color "$GREEN" "已成功拉取远程更新"
 }
 
 # 自动处理未暂存的更改
 handle_unstaged_changes() {
-    if [[ -n $(git status -s) ]]; then
+    # 先检查是否有未暂存的更改
+    local changes=$(git status --porcelain)
+    if [[ -n $changes ]]; then
         print_color "$YELLOW" "检测到未暂存的更改..."
+        print_color "$BLUE" "更改的文件："
+        echo "$changes"
+        echo
         
-        # 获取工作目录中的更改
-        local changes=$(git status --porcelain)
+        # 获取提交类型和表情
+        local commit_prefix
+        commit_prefix=$(get_commit_type)
+        
+        # 获取提交描述
+        local commit_desc
+        read -e -p "请输入提交描述: " commit_desc < /dev/tty
+        if [ -z "$commit_desc" ]; then
+            print_color "$RED" "错误: 提交描述不能为空"
+            exit 1
+        fi
         
         # 自动暂存所有更改
         git add -A
         STATUS_FILES_ADDED=true
         print_color "$GREEN" "已自动暂存所有更改"
         
-        # 获取提交类型和表情
-        local commit_prefix=$(get_commit_type)
-        
-        # 自动提交
-        local timestamp=$(date "+%Y-%m-%d %H:%M:%S")
-        local commit_msg="${commit_prefix}自动提交于 $timestamp\n\n更改文件:\n$changes"
-        git commit -m "$commit_msg"
+        # 组合提交信息并提交
+        git commit -m "${commit_prefix}${commit_desc}"
         STATUS_CHANGES_COMMITTED=true
         STATUS_COMMIT_HASH=$(git rev-parse HEAD)
-        STATUS_COMMIT_MESSAGE="$commit_msg"
+        STATUS_COMMIT_MESSAGE="${commit_prefix}${commit_desc}"
         print_color "$GREEN" "已自动提交更改"
         
         # 显示提交信息
         print_color "$BLUE" "提交详情："
         git show --stat HEAD
+        
+        # 先拉取远程更新
+        handle_remote_updates
+        
+        # 自动推送到远程
+        print_color "$BLUE" "正在推送到远程仓库..."
+        if git push origin "$(git rev-parse --abbrev-ref HEAD)"; then
+            print_color "$GREEN" "成功推送到远程仓库"
+            exit 0
+        else
+            print_color "$RED" "推送失败，请检查远程仓库状态"
+            exit 1
+        fi
     fi
 }
 
@@ -334,7 +404,7 @@ commit_changes() {
         git pull origin "$STATUS_BRANCH"
         print_color "$GREEN" "成功更新本地仓库"
     else
-        handle_diverged_branches "$STATUS_BRANCH"
+        check_remote_updates
     fi
 
     # 检查是否有未提交的更改
@@ -428,151 +498,38 @@ commit_changes() {
     print_color "$YELLOW" "已暂存的更改:"
     git status -s
 
-    # 选择提交信息类型
-    declare -a commit_types=(
-        "feat: ✨ 新功能"
-        "fix: 🐛 修复bug"
-        "docs: 📝 文档更新"
-        "style: 💄 代码格式"
-        "refactor: ♻️ 代码重构"
-        "perf: ⚡️ 性能优化"
-        "test: ✅ 测试相关"
-        "build: 📦️ 构建相关"
-        "ci: 👷 CI/CD相关"
-        "chore: 🔨 其他更改"
-        "init: 🎉 初始化"
-        "security: 🔒 安全更新"
-        "deps: 📌 依赖更新"
-        "i18n: 🌐 国际化"
-        "typo: ✍️ 拼写修正"
-        "revert: ⏪️ 回退更改"
-        "merge: 🔀 合并分支"
-        "release: 🏷️ 发布版本"
-        "deploy: 🚀 部署相关"
-        "ui: 🎨 界面相关"
-        "custom: 🎯 自定义格式"
-    )
-
-    for i in "${!commit_types[@]}"; do
-        print_color "" "$((i+1)). ${commit_types[i]}"
-    done
-    read -e -p "请选择 (1-${#commit_types[@]}): " type_choice
-
-    if [ "$type_choice" -ge 1 ] && [ "$type_choice" -le ${#commit_types[@]} ]; then
-        selected_type=${commit_types[$((type_choice-1))]}
-    else
-        print_color "$RED" "错误: 无效的选择"
-        exit 1
-    fi
-
-    # 如果选择自定义格式，让用户选择表情
-    if [ "$type_choice" -eq ${#commit_types[@]} ]; then
-        declare -a emojis=(
-            "🎨 - 改进代码结构/格式"
-            "⚡️ - 提升性能"
-            "🔥 - 删除代码/文件"
-            "🐛 - 修复 bug"
-            "🚑️ - 重要补丁"
-            "✨ - 引入新功能"
-            "📝 - 撰写文档"
-            "🚀 - 部署功能"
-            "💄 - UI/样式更新"
-            "🎉 - 初次提交"
-            "✅ - 增加测试"
-            "🔒️ - 修复安全问题"
-            "🔐 - 添加或更新密钥"
-            "🔖 - 发布/版本标签"
-            "🚨 - 修复编译器/linter警告"
-            "🚧 - 工作进行中"
-            "💚 - 修复CI构建问题"
-            "⬇️ - 降级依赖"
-            "⬆️ - 升级依赖"
-            "📌 - 固定依赖版本"
-            "👷 - 添加CI构建系统"
-            "📈 - 添加分析或跟踪代码"
-            "♻️ - 重构代码"
-            "➕ - 添加依赖"
-            "➖ - 删除依赖"
-            "🔧 - 修改配置文件"
-            "🔨 - 重大重构"
-            "🌐 - 国际化与本地化"
-            "✏️ - 修复拼写错误"
-            "💩 - 需要改进的代码"
-            "⏪️ - 回退更改"
-            "🔀 - 合并分支"
-            "📦️ - 更新编译文件"
-            "👽️ - 更新外部API"
-            "🚚 - 移动/重命名文件"
-            "📄 - 添加许可证"
-            "💥 - 重大更改"
-            "🍱 - 添加资源"
-            "♿️ - 提高可访问性"
-            "🔊 - 添加日志"
-            "🔇 - 删除日志"
-        )
-
-        print_color "$YELLOW" "请选择表情:"
-        for i in "${!emojis[@]}"; do
-            print_color "" "$((i+1)). ${emojis[i]}"
-        done
-        
-        read -e -p "请选择 (1-${#emojis[@]}): " emoji_choice
-        
-        if [ "$emoji_choice" -ge 1 ] && [ "$emoji_choice" -le ${#emojis[@]} ]; then
-            # 提取选中表情的emoji部分（第一个空格之前的部分）
-            selected_emoji=$(echo "${emojis[$((emoji_choice-1))]}" | cut -d' ' -f1)
-            
-            read -e -p "请输入提交类型: " custom_type
-            commit_prefix="$custom_type: $selected_emoji"
-        else
-            print_color "$RED" "错误: 无效的选择"
-            exit 1
-        fi
-    else
-        commit_prefix=$(echo "$selected_type" | cut -d' ' -f1,2)
-    fi
-
+    # 获取提交类型和表情
+    local commit_prefix
+    commit_prefix=$(get_commit_type)
+    
     # 获取提交描述
-    read -e -p "请输入提交描述: " commit_desc
+    local commit_desc
+    read -e -p "请输入提交描述: " commit_desc < /dev/tty
     if [ -z "$commit_desc" ]; then
-        print_color "$RED" "提交描述不能为空"
+        print_color "$RED" "错误: 提交描述不能为空"
         exit 1
     fi
-
-    # 组合完整的提交信息
-    message="$commit_prefix $commit_desc"
-    STATUS_COMMIT_MESSAGE="$message"
-
-    # 获取分支名称
-    read -e -p "请输入分支名称 (默认是 $current_branch): " branch
-    if [ -z "$branch" ]; then
-        branch=$current_branch
-    fi
-    STATUS_BRANCH="$branch"
-
-    print_color "$YELLOW" "即将执行以下操作:"
-    print_color "" "1. git commit -m \"$message\""
-    print_color "" "2. git push origin $branch"
-
-    read -e -p "确认执行? (y/n): " confirm
-    if [ "$(echo "$confirm" | tr '[:upper:]' '[:lower:]')" != "y" ]; then
-        print_color "" "操作已取消"
-        exit 0
-    fi
-
-    # 执行git命令
-    print_color "$YELLOW" "正在执行git操作..."
-
-    print_color "$YELLOW" "1. 提交更改..."
-    git commit -m "$message"
+    
+    # 组合提交信息并提交
+    git commit -m "${commit_prefix}${commit_desc}"
     STATUS_CHANGES_COMMITTED=true
     STATUS_COMMIT_HASH=$(git rev-parse HEAD)
-
-    print_color "$YELLOW" "2. 推送到远程..."
-    if git push origin "$branch"; then
-        print_color "$GREEN" "所有操作已成功完成！"
+    STATUS_COMMIT_MESSAGE="${commit_prefix}${commit_desc}"
+    print_color "$GREEN" "已提交更改"
+    
+    # 显示提交信息
+    print_color "$BLUE" "提交详情："
+    git show --stat HEAD
+    
+    # 先拉取远程更新
+    handle_remote_updates
+    
+    # 自动推送到远程
+    print_color "$BLUE" "正在推送到远程仓库..."
+    if git push origin "$(git rev-parse --abbrev-ref HEAD)"; then
+        print_color "$GREEN" "成功推送到远程仓库"
     else
-        print_color "$RED" "推送失败，请检查网络连接或远程仓库状态"
+        print_color "$RED" "推送失败，请检查远程仓库状态"
         show_status_and_recovery
         exit 1
     fi
@@ -584,11 +541,43 @@ if ! git rev-parse --git-dir > /dev/null 2>&1; then
     exit 1
 fi
 
-# 在检查远程更新之前处理未暂存的更改
-handle_unstaged_changes
-
 # 获取当前分支
 current_branch=$(git rev-parse --abbrev-ref HEAD)
 
-# 显示主菜单
-show_main_menu
+# 检查远程仓库更新
+print_color "$BLUE" "正在检查远程仓库更新..."
+git fetch origin
+
+# 检查本地和远程是否分叉
+LOCAL=$(git rev-parse @)
+REMOTE=$(git rev-parse @{u})
+BASE=$(git merge-base @ @{u})
+
+if [ $LOCAL = $REMOTE ]; then
+    print_color "$GREEN" "本地仓库已是最新"
+    show_main_menu
+elif [ $LOCAL = $BASE ]; then
+    print_color "$YELLOW" "检测到远程仓库有更新"
+    
+    # 检查是否有未暂存的更改
+    if [[ -n $(git status -s) ]]; then
+        print_color "$YELLOW" "检测到未暂存的更改，将自动处理..."
+        handle_unstaged_changes
+    else
+        print_color "$BLUE" "正在拉取远程更新..."
+        git pull --rebase
+        print_color "$GREEN" "成功更新本地仓库"
+    fi
+    
+    show_main_menu
+elif [ $REMOTE = $BASE ]; then
+    print_color "$YELLOW" "本地有新的提交，需要推送到远程"
+    if git push origin "$current_branch"; then
+        print_color "$GREEN" "成功推送到远程仓库"
+    else
+        print_color "$RED" "推送失败，请检查远程仓库状态"
+        exit 1
+    fi
+else
+    check_remote_updates
+fi
