@@ -410,159 +410,134 @@ show_main_menu() {
     done
 }
 
-# 提交更改函数
-commit_changes() {
-    # 检查远程仓库更新
-    print_color "$BLUE" "正在检查远程仓库更新..."
+# 选择性添加文件
+select_files_to_add() {
+    # 获取已更改但未暂存的文件列表
+    local changed_files=($(git status --porcelain | grep -E '^\s*M' | sed 's/^\s*M\s*//'))
     
-    # 获取当前分支名
-    STATUS_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-    
-    # 获取远程更新
-    git fetch origin
-    
-    # 检查本地分支与远程分支的差异
-    LOCAL=$(git rev-parse @)
-    REMOTE=$(git rev-parse @{u})
-    BASE=$(git merge-base @ @{u})
-    
-    if [ "$REMOTE" = "$BASE" ]; then
-        # 本地领先于远程，可以继续
-        print_color "$GREEN" "本地仓库已是最新"
-    elif [ "$LOCAL" = "$BASE" ]; then
-        # 远程领先于本地，需要更新
-        print_color "$YELLOW" "检测到远程仓库有更新，正在拉取..."
-        git pull origin "$STATUS_BRANCH"
-        print_color "$GREEN" "成功更新本地仓库"
-    else
-        check_remote_updates
+    if [ ${#changed_files[@]} -eq 0 ]; then
+        print_color "$YELLOW" "没有需要添加的文件"
+        return 1
     fi
-
-    # 检查是否有未提交的更改
-    if [ -z "$(git status --porcelain)" ]; then
-        print_color "$YELLOW" "没有发现需要提交的更改"
-        read -e -p "是否继续? (y/n): " continue
-        if [ "$(echo "$continue" | tr '[:upper:]' '[:lower:]')" != "y" ]; then
-            print_color "" "操作已取消"
-            exit 0
-        fi
-    fi
-
-    # 显示当前Git状态
-    print_color "" "当前Git状态:"
-    git status -s
-
-    # 选择提交方式
-    print_color "$YELLOW" "请选择提交方式:"
-    print_color "" "1. 提交所有更改 (git add .)"
-    print_color "" "2. 交互式选择文件 (git add -p)"
-    print_color "" "3. 选择已更改的文件"
-    read -e -p "请选择 (1-3): " choice
-
-    case $choice in
-        1)
-            git add .
-            STATUS_FILES_ADDED=true
-            ;;
-        2)
-            git add -p
-            STATUS_FILES_ADDED=true
-            ;;
-        3)
-            # 获取已更改的文件列表
-            files=()
-            while IFS= read -r line; do
-                file="${line#???}"
-                files+=("$file")
-            done < <(git status --porcelain)
-            
-            if [ ${#files[@]} -eq 0 ]; then
-                print_color "$RED" "没有发现已更改的文件"
-                exit 1
-            fi
-
-            # 显示文件列表并让用户选择
-            print_color "$YELLOW" "已更改的文件列表:"
-            for i in "${!files[@]}"; do
-                num=$((i + 1))
-                print_color "" "$num. ${files[$i]}"
-            done
-
-            print_color "$YELLOW" "请输入要添加的文件编号（多个文件用空格分隔，输入 'a' 选择全部）:"
-            read -r selections
-
-            if [ "$selections" = "a" ]; then
-                for file in "${files[@]}"; do
-                    if git add "$file" 2>/dev/null; then
-                        print_color "$GREEN" "成功添加: $file"
-                    else
-                        print_color "$RED" "添加失败: $file"
-                        exit 1
-                    fi
-                done
+    
+    print_color "$BLUE" "已更改的文件列表:"
+    for i in "${!changed_files[@]}"; do
+        echo "$((i+1)). ${changed_files[i]}"
+    done
+    
+    local choice
+    read -p "请输入要添加的文件编号（多个文件用空格分隔，输入 'a' 选择全部）: " choice
+    
+    if [ "$choice" = "a" ]; then
+        # 使用 git add 时保持在仓库根目录
+        local repo_root=$(git rev-parse --show-toplevel)
+        cd "$repo_root" || exit 1
+        
+        for file in "${changed_files[@]}"; do
+            if git add "$file"; then
+                print_color "$GREEN" "已添加: $file"
             else
-                for selection in $selections; do
-                    index=$((selection-1))
-                    if [ "$index" -ge 0 ] && [ "$index" -lt "${#files[@]}" ]; then
-                        file="${files[$index]}"
-                        if git add "$file" 2>/dev/null; then
-                            print_color "$GREEN" "成功添加: $file"
-                        else
-                            print_color "$RED" "添加失败: $file"
-                            exit 1
-                        fi
-                    else
-                        print_color "$RED" "无效的选择: $selection"
-                        exit 1
-                    fi
-                done
+                print_color "$RED" "添加失败: $file"
             fi
-            STATUS_FILES_ADDED=true
-            ;;
-        *)
-            print_color "$RED" "错误: 无效的选择"
-            exit 1
-            ;;
-    esac
-
-    # 显示已暂存的更改
-    print_color "$YELLOW" "已暂存的更改:"
-    git status -s
-
-    # 获取提交类型和表情
-    local commit_prefix
-    commit_prefix=$(get_commit_type)
-    
-    # 获取提交描述
-    local commit_desc
-    read -e -p "请输入提交描述: " commit_desc < /dev/tty
-    if [ -z "$commit_desc" ]; then
-        print_color "$RED" "错误: 提交描述不能为空"
-        exit 1
-    fi
-    
-    # 组合提交信息并提交
-    git commit -m "${commit_prefix}${commit_desc}"
-    STATUS_CHANGES_COMMITTED=true
-    STATUS_COMMIT_HASH=$(git rev-parse HEAD)
-    STATUS_COMMIT_MESSAGE="${commit_prefix}${commit_desc}"
-    print_color "$GREEN" "已提交更改"
-    
-    # 显示提交信息
-    print_color "$BLUE" "提交详情："
-    git show --stat HEAD
-    
-    # 先拉取远程更新
-    handle_remote_updates
-    
-    # 自动推送到远程
-    print_color "$BLUE" "正在推送到远程仓库..."
-    if git push origin "$(git rev-parse --abbrev-ref HEAD)"; then
-        print_color "$GREEN" "成功推送到远程仓库"
+        done
     else
-        print_color "$RED" "推送失败，请检查远程仓库状态"
-        show_status_and_recovery
-        exit 1
+        # 处理多个文件编号
+        local selected_files=()
+        for num in $choice; do
+            if [ "$num" -ge 1 ] && [ "$num" -le "${#changed_files[@]}" ]; then
+                selected_files+=("${changed_files[$((num-1))]}")
+            else
+                print_color "$RED" "无效的文件编号: $num"
+                return 1
+            fi
+        done
+        
+        # 使用 git add 时保持在仓库根目录
+        local repo_root=$(git rev-parse --show-toplevel)
+        cd "$repo_root" || exit 1
+        
+        for file in "${selected_files[@]}"; do
+            if git add "$file"; then
+                print_color "$GREEN" "已添加: $file"
+            else
+                print_color "$RED" "添加失败: $file"
+            fi
+        done
+    fi
+}
+
+# 提交更改
+commit_changes() {
+    # 检查是否有未提交的更改
+    if ! git diff-index --quiet HEAD --; then
+        print_color "$YELLOW" "当前Git状态:"
+        git status -s
+        
+        print_color "$BLUE" "请选择提交方式:"
+        echo "1. 提交所有更改 (git add .)"
+        echo "2. 交互式选择文件 (git add -p)"
+        echo "3. 选择已更改的文件"
+        
+        local choice
+        while true; do
+            read -p "请选择 (1-3): " choice
+            case $choice in
+                1)
+                    # 使用 git add 时保持在仓库根目录
+                    local repo_root=$(git rev-parse --show-toplevel)
+                    cd "$repo_root" || exit 1
+                    git add .
+                    break
+                    ;;
+                2)
+                    git add -p
+                    break
+                    ;;
+                3)
+                    select_files_to_add
+                    break
+                    ;;
+                *)
+                    print_color "$RED" "无效的选项，请重新选择"
+                    ;;
+            esac
+        done
+        
+        # 获取提交类型和表情
+        local commit_prefix
+        commit_prefix=$(get_commit_type)
+        
+        # 获取提交描述
+        local commit_desc
+        read -e -p "请输入提交描述: " commit_desc < /dev/tty
+        if [ -z "$commit_desc" ]; then
+            print_color "$RED" "错误: 提交描述不能为空"
+            exit 1
+        fi
+        
+        # 组合提交信息并提交
+        git commit -m "${commit_prefix}${commit_desc}"
+        STATUS_CHANGES_COMMITTED=true
+        STATUS_COMMIT_HASH=$(git rev-parse HEAD)
+        STATUS_COMMIT_MESSAGE="${commit_prefix}${commit_desc}"
+        print_color "$GREEN" "已提交更改"
+        
+        # 显示提交信息
+        print_color "$BLUE" "提交详情："
+        git show --stat HEAD
+        
+        # 先拉取远程更新
+        handle_remote_updates
+        
+        # 自动推送到远程
+        print_color "$BLUE" "正在推送到远程仓库..."
+        if git push origin "$(git rev-parse --abbrev-ref HEAD)"; then
+            print_color "$GREEN" "成功推送到远程仓库"
+            exit 0
+        else
+            print_color "$RED" "推送失败，请检查远程仓库状态"
+            exit 1
+        fi
     fi
 }
 
